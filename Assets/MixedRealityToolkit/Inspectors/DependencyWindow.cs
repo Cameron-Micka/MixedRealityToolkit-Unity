@@ -99,6 +99,8 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Editor
             if (previousSelectedToolbarIndex != selectedToolbarIndex)
             {
                 scrollPosition = Vector2.zero;
+
+                SelectFocusedControl();
             }
 
             EditorGUILayout.Space();
@@ -127,6 +129,18 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Editor
                     assetSelection = Selection.objects[0];
                     Repaint();
                 }
+            }
+        }
+
+        private void SelectFocusedControl()
+        {
+            DependencyGraphNode node;
+
+            if (dependencyGraph.TryGetValue(GUI.GetNameOfFocusedControl(), out node) && 
+                node.targetObject != null)
+            {
+                assetSelection = node.targetObject;
+                Repaint();
             }
         }
 
@@ -471,6 +485,7 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Editor
                     }
                     else
                     {
+                        GUI.SetNextControlName(node.guid);
                         EditorGUILayout.ObjectField(string.Empty, node.targetObject, typeof(Object), false);
                     }
                 }
