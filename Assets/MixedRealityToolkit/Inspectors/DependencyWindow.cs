@@ -149,7 +149,7 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Editor
             MixedRealityInspectorUtility.RenderMixedRealityToolkitLogo();
 
             EditorGUILayout.LabelField("Mixed Reality Toolkit Dependency Window", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("This tool displays how assets reference and depend on each other. Dependencies are calculated by parsing guids within project YAML files, code dependencies are not considered.", EditorStyles.wordWrappedLabel);
+            EditorGUILayout.LabelField("This tool displays how assets reference and depend on each other. Dependencies are calculated by parsing guids within project YAML files, script to script dependencies are not considered.", EditorStyles.wordWrappedLabel);
 
             EditorGUILayout.Space();
         }
