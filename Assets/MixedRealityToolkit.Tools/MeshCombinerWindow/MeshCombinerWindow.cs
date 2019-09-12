@@ -30,7 +30,9 @@ namespace Microsoft.MixedReality.Toolkit.Editor
         {
             public List<MeshFilter> MeshFilters = new List<MeshFilter>();
             public bool IncludeInactive = false;
-            public bool BakeMaterialColorIntoVertexColor = false;
+            public bool BakeMeshIDIntoUVChannel = true;
+            public int MeshIDUVChannel = 3;
+            public bool BakeMaterialColorIntoVertexColor = true;
             public TextureCombineSettings MainTexture = new TextureCombineSettings() { Merge = true, Resolution = 2048, Padding = 4 };
 
             public bool RequiresMaterialData()
@@ -41,16 +43,19 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
             public bool AllowsMeshInstancing()
             {
-                return !RequiresMaterialData();
+                return !RequiresMaterialData() && 
+                       !BakeMeshIDIntoUVChannel;
             }
         }
 
         public struct MeshCombineResult
         {
-            public Mesh mesh;
-            public Texture2D mainTexture;
+            public Mesh Mesh;
+            public Texture2D MainTexture;
+            public Dictionary<int, int> Mappings;
         }
 
+        private const int editorGUIIndentAmmount = 2;
         private const int maxMeshFiltersDisplayed = 256;
         private const string meshCombinerWindow_URL = "https://microsoft.github.io/MixedRealityToolkit-Unity/Documentation/Tools/MeshCombinerWindow.html";
 
@@ -59,7 +64,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
         {
             var window = GetWindow<MeshCombinerWindow>();
             window.titleContent = new GUIContent("Mesh Combiner");
-            window.minSize = new Vector2(420.0f, 480.0f);
+            window.minSize = new Vector2(420.0f, 520.0f);
             window.Show();
         }
 
@@ -74,11 +79,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                 EditorGUILayout.BeginVertical("Box");
                 {
                     targetPrefab = (GameObject)EditorGUILayout.ObjectField("Target Prefab:", targetPrefab, typeof(GameObject), true);
-
-                    if (targetPrefab != null)
-                    {
-                        AutopopulateMeshFilters();
-                    }
+                    AutopopulateMeshFilters();
                 }
                 EditorGUILayout.EndVertical();
 
@@ -127,29 +128,48 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
                 GUILayout.Label("Export", EditorStyles.boldLabel);
 
-                var previousLableWidth = EditorGUIUtility.labelWidth;
-                EditorGUIUtility.labelWidth = EditorGUIUtility.currentViewWidth - 30;
+                var previousLabelWidth = EditorGUIUtility.labelWidth;
+                var newLabelWidth = EditorGUIUtility.currentViewWidth - 30;
+
+                EditorGUIUtility.labelWidth = newLabelWidth;
                 meshCombineSettings.IncludeInactive = EditorGUILayout.Toggle("Include Inactive", meshCombineSettings.IncludeInactive);
+                meshCombineSettings.BakeMeshIDIntoUVChannel = EditorGUILayout.Toggle("Bake Mesh ID Into UV Channel", meshCombineSettings.BakeMeshIDIntoUVChannel);
+                EditorGUIUtility.labelWidth = previousLabelWidth;
+
+                if (meshCombineSettings.BakeMeshIDIntoUVChannel)
+                {
+                    EditorGUI.indentLevel += editorGUIIndentAmmount;
+                    meshCombineSettings.MeshIDUVChannel = EditorGUILayout.IntSlider("UV Channel", meshCombineSettings.MeshIDUVChannel, 1, 3);
+                    EditorGUI.indentLevel -= editorGUIIndentAmmount;
+                }
+
+                EditorGUIUtility.labelWidth = newLabelWidth;
                 meshCombineSettings.BakeMaterialColorIntoVertexColor = EditorGUILayout.Toggle("Bake Material Color Into Vertex Color", meshCombineSettings.BakeMaterialColorIntoVertexColor);
                 meshCombineSettings.MainTexture.Merge = EditorGUILayout.Toggle("Merge Main Textures", meshCombineSettings.MainTexture.Merge);
-                EditorGUIUtility.labelWidth = previousLableWidth;
+                EditorGUIUtility.labelWidth = previousLabelWidth;
 
                 if (meshCombineSettings.MainTexture.Merge)
                 {
-                    EditorGUI.indentLevel += 2;
-                    meshCombineSettings.MainTexture.Resolution = Mathf.Clamp(EditorGUILayout.IntField("Resolution", meshCombineSettings.MainTexture.Resolution), 2, 4096);
-                    meshCombineSettings.MainTexture.Padding = Mathf.Clamp(EditorGUILayout.IntField("Padding", meshCombineSettings.MainTexture.Padding), 0, 256);
-                    EditorGUI.indentLevel -= 2;
-                }
-
-                if (GUILayout.Button("Save Mesh"))
-                {
-                    Save(targetPrefab, meshCombineSettings, MeshCombine(meshCombineSettings));
+                    EditorGUI.indentLevel += editorGUIIndentAmmount;
+                    meshCombineSettings.MainTexture.Resolution = EditorGUILayout.IntSlider("Resolution", meshCombineSettings.MainTexture.Resolution, 2, 4096);
+                    meshCombineSettings.MainTexture.Padding = EditorGUILayout.IntSlider("Padding", meshCombineSettings.MainTexture.Padding, 0, 256);
+                    EditorGUI.indentLevel -= editorGUIIndentAmmount;
                 }
 
                 EditorGUILayout.Space();
 
-                GUILayout.Box(string.Format("Combinable Mesh Count: {0}", combinableMeshCount), EditorStyles.helpBox, new GUILayoutOption[0]);
+                EditorGUILayout.BeginVertical("Box");
+                {
+                    if (GUILayout.Button("Combine Mesh"))
+                    {
+                        Save(targetPrefab, meshCombineSettings, MeshCombine(meshCombineSettings));
+                    }
+
+                    EditorGUILayout.Space();
+
+                    GUILayout.Box(string.Format("Combinable Mesh Count: {0}", combinableMeshCount), EditorStyles.helpBox, new GUILayoutOption[0]);
+                }
+                EditorGUILayout.EndVertical();
             }
             EditorGUILayout.EndVertical();
         }
@@ -201,13 +221,16 @@ namespace Microsoft.MixedReality.Toolkit.Editor
         {
             meshCombineSettings.MeshFilters.Clear();
 
-            var newMeshFilters = targetPrefab.GetComponentsInChildren<MeshFilter>(meshCombineSettings.IncludeInactive);
-
-            foreach (var meshFilter in newMeshFilters)
+            if (targetPrefab != null)
             {
-                if (CanCombine(meshFilter))
+                var newMeshFilters = targetPrefab.GetComponentsInChildren<MeshFilter>(meshCombineSettings.IncludeInactive);
+
+                foreach (var meshFilter in newMeshFilters)
                 {
-                    meshCombineSettings.MeshFilters.Add(meshFilter);
+                    if (CanCombine(meshFilter))
+                    {
+                        meshCombineSettings.MeshFilters.Add(meshFilter);
+                    }
                 }
             }
         }
@@ -233,7 +256,9 @@ namespace Microsoft.MixedReality.Toolkit.Editor
             var output = new MeshCombineResult();
 
             var vertexCount = 0;
+            var meshID = 0;
             var combineInstances = new List<CombineInstance>();
+            var meshCombineInstanceMappings = new Dictionary<int, int>();
             var textureCombineInstanceMappings = new Dictionary<Texture2D, List<CombineInstance>>();
             var texturelessCombineInstances = new List<CombineInstance>();
 
@@ -248,6 +273,12 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                 var combineInstance = new CombineInstance();
                 combineInstance.mesh = settings.AllowsMeshInstancing() ? meshFilter.sharedMesh : Instantiate(meshFilter.sharedMesh) as Mesh;
 
+                if (settings.BakeMeshIDIntoUVChannel)
+                {
+                    ++meshID;
+                    combineInstance.mesh.SetUVs(settings.MeshIDUVChannel, Enumerable.Repeat(new Vector2(meshID, 0.0f), combineInstance.mesh.vertexCount).ToList());
+                }
+
                 if (settings.RequiresMaterialData())
                 {
                     var material = meshFilter.GetComponent<Renderer>()?.sharedMaterial;
@@ -257,7 +288,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                         if (settings.BakeMaterialColorIntoVertexColor)
                         {
                             // Write the material color to all vertex colors.
-                            combineInstance.mesh.colors = Enumerable.Repeat(material.color, meshFilter.sharedMesh.vertexCount).ToArray();
+                            combineInstance.mesh.colors = Enumerable.Repeat(material.color, combineInstance.mesh.vertexCount).ToArray();
                         }
 
                         if (settings.MainTexture.Merge)
@@ -290,6 +321,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                 vertexCount += combineInstance.mesh.vertexCount;
 
                 combineInstances.Add(combineInstance);
+                meshCombineInstanceMappings[meshFilter.GetInstanceID()] = meshID;
             }
 
             if (vertexCount != 0)
@@ -298,13 +330,13 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                 {
                     // Build a texture atlas of the accumulated textures.
                     var textures = textureCombineInstanceMappings.Keys.ToArray();
-                    output.mainTexture = new Texture2D(settings.MainTexture.Resolution, settings.MainTexture.Resolution);
-                    var rects = output.mainTexture.PackTextures(textures, settings.MainTexture.Padding, output.mainTexture.width);
+                    output.MainTexture = new Texture2D(settings.MainTexture.Resolution, settings.MainTexture.Resolution);
+                    var rects = output.MainTexture.PackTextures(textures, settings.MainTexture.Padding, output.MainTexture.width);
 
                     // Unity's PackTextures method defaults to black for areas that do not contain texture data. Because Unity's material 
                     // system defaults to a white texture for materials that do not have texture specified we need to fill in areas of the 
                     // atlas without texture data to white.
-                    FillUnusedPixels(output.mainTexture, rects, Color.white);
+                    FillUnusedPixels(output.MainTexture, rects, Color.white);
 
                     // Remap the current UVs to their respective rects in the texture atlas.
                     for (var i = 0; i < textures.Length; ++i)
@@ -330,16 +362,15 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                     // Meshes without a texture should sample the last pixel in the atlas.
                     foreach (var combineInstance in texturelessCombineInstances)
                     {
-                        var uvs = new List<Vector2>();
-                        combineInstance.mesh.GetUVs(0, uvs);
-                        combineInstance.mesh.SetUVs(0, Enumerable.Repeat(new Vector2(1.0f, 1.0f), uvs.Count).ToList());
+                        combineInstance.mesh.SetUVs(0, Enumerable.Repeat(new Vector2(1.0f, 1.0f), combineInstance.mesh.vertexCount).ToList());
                     }
                 }
 
                 // Perform the mesh combine.
-                output.mesh = new Mesh();
-                output.mesh.indexFormat = (vertexCount >= ushort.MaxValue) ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
-                output.mesh.CombineMeshes(combineInstances.ToArray(), true, true, false);
+                output.Mesh = new Mesh();
+                output.Mesh.indexFormat = (vertexCount >= ushort.MaxValue) ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
+                output.Mesh.CombineMeshes(combineInstances.ToArray(), true, true, false);
+                output.Mappings = meshCombineInstanceMappings;
             }
             else
             {
@@ -404,12 +435,10 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
         private static void Save(GameObject targetPrefab, MeshCombineSettings settings, MeshCombineResult result)
         {
-            if (result.mesh == null)
+            if (result.Mesh == null)
             {
                 return;
             }
-
-            var watch = System.Diagnostics.Stopwatch.StartNew();
 
             var path = AssetDatabase.GetAssetPath(targetPrefab);
             path = string.IsNullOrEmpty(path) ? PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(targetPrefab) : path;
@@ -418,19 +447,21 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
             path = EditorUtility.SaveFilePanelInProject("Save Combined Mesh", filename, "prefab", "Please enter a file name to save the mesh to.", directory);
 
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+
             if (path.Length != 0)
             {
                 // Save the mesh.
-                AssetDatabase.CreateAsset(result.mesh, Path.ChangeExtension(path, ".asset"));
+                AssetDatabase.CreateAsset(result.Mesh, Path.ChangeExtension(path, ".asset"));
 
                 // Save the texture.
-                if (result.mainTexture != null)
+                if (result.MainTexture != null)
                 {
-                    var decompressedTexture = new Texture2D(result.mainTexture.width, result.mainTexture.height, GetUncompressedEquivalent(result.mainTexture.format), true);
-                    decompressedTexture.SetPixels(result.mainTexture.GetPixels());
+                    var decompressedTexture = new Texture2D(result.MainTexture.width, result.MainTexture.height, GetUncompressedEquivalent(result.MainTexture.format), true);
+                    decompressedTexture.SetPixels(result.MainTexture.GetPixels());
                     decompressedTexture.Apply();
 
-                    DestroyImmediate(result.mainTexture);
+                    DestroyImmediate(result.MainTexture);
 
                     var textureData = decompressedTexture.EncodeToTGA();
 
@@ -439,7 +470,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                     var texturePath = Path.ChangeExtension(path, ".tga");
                     File.WriteAllBytes(texturePath, textureData);
                     AssetDatabase.Refresh();
-                    result.mainTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
+                    result.MainTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
                 }
 
                 // Save the material.
@@ -447,7 +478,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
                 if (settings.MainTexture.Merge)
                 {
-                    material.mainTexture = result.mainTexture;
+                    material.mainTexture = result.MainTexture;
                 }
 
                 if (settings.BakeMaterialColorIntoVertexColor)
@@ -460,7 +491,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
                 // Save the prefab.
                 var prefab = new GameObject(filename);
-                prefab.AddComponent<MeshFilter>().sharedMesh = result.mesh;
+                prefab.AddComponent<MeshFilter>().sharedMesh = result.Mesh;
                 prefab.AddComponent<MeshRenderer>().sharedMaterial = material;
                 PrefabUtility.SaveAsPrefabAsset(prefab, path);
                 AssetDatabase.SaveAssets();
