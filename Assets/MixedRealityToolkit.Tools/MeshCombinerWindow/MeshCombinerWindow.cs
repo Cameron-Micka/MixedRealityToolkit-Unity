@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Microsoft.MixedReality.Toolkit.Utilities.Editor;
+using System;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
@@ -12,9 +13,19 @@ namespace Microsoft.MixedReality.Toolkit.Editor
     {
         private GameObject targetPrefab = null;
         private MeshCombineSettingsObject settingsObject = null;
+        private bool includeInactive = false;
+        private TextureExtension textureExtension = TextureExtension.TGA;
         private Vector2 meshFilterScrollPosition = Vector2.zero;
         private Vector2 textureSettingsScrollPosition = Vector2.zero;
 
+        private enum TextureExtension
+        {
+            TGA = 0,
+            PNG = 1,
+            JPG = 2
+        }
+
+        private static readonly string[] textureExtensionNames = Array.ConvertAll(Enum.GetNames(typeof(TextureExtension)), s => '.' + s.ToLower());
         private const int editorGUIIndentAmmount = 2;
         private const int maxMeshFiltersDisplayed = 256;
         private const string meshCombinerWindow_URL = "https://microsoft.github.io/MixedRealityToolkit-Unity/Documentation/Tools/MeshCombinerWindow.html";
@@ -47,13 +58,17 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                 }
                 EditorGUILayout.EndVertical();
 
-                meshFilterScrollPosition = EditorGUILayout.BeginScrollView(meshFilterScrollPosition);
+                EditorGUILayout.BeginVertical("Box");
                 {
-                    GUI.enabled = false;
-                    EditorGUILayout.PropertyField(settingsSerializedObject.FindProperty("Context.MeshFilters"), true);
-                    GUI.enabled = true;
+                    meshFilterScrollPosition = EditorGUILayout.BeginScrollView(meshFilterScrollPosition);
+                    {
+                        GUI.enabled = false;
+                        EditorGUILayout.PropertyField(settingsSerializedObject.FindProperty("Context.MeshFilters"), true);
+                        GUI.enabled = true;
+                    }
+                    EditorGUILayout.EndScrollView();
                 }
-                EditorGUILayout.EndScrollView();
+                EditorGUILayout.EndVertical();
             }
             EditorGUILayout.EndVertical();
 
@@ -66,38 +81,46 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
                 GUILayout.Label("Export", EditorStyles.boldLabel);
 
-                var previousLabelWidth = EditorGUIUtility.labelWidth;
-                var newLabelWidth = EditorGUIUtility.currentViewWidth - 32;
-
-                EditorGUIUtility.labelWidth = newLabelWidth;
-                settings.IncludeInactive = EditorGUILayout.Toggle("Include Inactive", settings.IncludeInactive);
-                settings.BakeMeshIDIntoUVChannel = EditorGUILayout.Toggle("Bake Mesh ID Into UV Channel", settings.BakeMeshIDIntoUVChannel);
-                EditorGUIUtility.labelWidth = previousLabelWidth;
-
-                if (settings.BakeMeshIDIntoUVChannel)
+                EditorGUILayout.BeginVertical("Box");
                 {
-                    EditorGUI.indentLevel += editorGUIIndentAmmount;
-                    settings.MeshIDUVChannel = EditorGUILayout.IntSlider("UV Channel", settings.MeshIDUVChannel, 1, 3);
-                    EditorGUI.indentLevel -= editorGUIIndentAmmount;
+                    var previousLabelWidth = EditorGUIUtility.labelWidth;
+                    EditorGUIUtility.labelWidth = EditorGUIUtility.currentViewWidth - 36;
+                    includeInactive = EditorGUILayout.Toggle("Include Inactive", includeInactive);
+                    settings.BakeMaterialColorIntoVertexColor = EditorGUILayout.Toggle("Bake Material Color Into Vertex Color", settings.BakeMaterialColorIntoVertexColor);
+                    settings.BakeMeshIDIntoUVChannel = EditorGUILayout.Toggle("Bake Mesh ID Into UV Channel", settings.BakeMeshIDIntoUVChannel);
+                    EditorGUIUtility.labelWidth = previousLabelWidth;
+
+                    if (settings.BakeMeshIDIntoUVChannel)
+                    {
+                        EditorGUI.indentLevel += editorGUIIndentAmmount;
+                        settings.MeshIDUVChannel = EditorGUILayout.IntSlider("UV Channel", settings.MeshIDUVChannel, 1, 3);
+                        EditorGUI.indentLevel -= editorGUIIndentAmmount;
+                    }
                 }
+                EditorGUILayout.EndVertical();
 
-                EditorGUIUtility.labelWidth = newLabelWidth;
-                settings.BakeMaterialColorIntoVertexColor = EditorGUILayout.Toggle("Bake Material Color Into Vertex Color", settings.BakeMaterialColorIntoVertexColor);
-                EditorGUIUtility.labelWidth = previousLabelWidth;
-
-                textureSettingsScrollPosition = EditorGUILayout.BeginScrollView(textureSettingsScrollPosition);
+                EditorGUILayout.BeginVertical("Box");
                 {
-                    EditorGUILayout.PropertyField(settingsSerializedObject.FindProperty("Context.TextureSettings"), true);
+                    textureExtension = (TextureExtension)EditorGUILayout.EnumPopup("Texture Extension", textureExtension);
+
+                    textureSettingsScrollPosition = EditorGUILayout.BeginScrollView(textureSettingsScrollPosition);
+                    {
+                        EditorGUILayout.PropertyField(settingsSerializedObject.FindProperty("Context.TextureSettings"), true);
+                    }
+                    EditorGUILayout.EndScrollView();
                 }
-                EditorGUILayout.EndScrollView();
+                EditorGUILayout.EndVertical();
 
                 EditorGUILayout.Space();
 
                 EditorGUILayout.BeginVertical("Box");
                 {
+
+                    EditorGUILayout.Space();
+
                     if (GUILayout.Button("Combine Mesh"))
                     {
-                        Save(targetPrefab, MeshUtility.CombineModels(settings));
+                        Save(MeshUtility.CombineModels(settings));
                     }
 
                     EditorGUILayout.Space();
@@ -155,7 +178,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
             if (targetPrefab != null)
             {
-                var newMeshFilters = targetPrefab.GetComponentsInChildren<MeshFilter>(settings.IncludeInactive);
+                var newMeshFilters = targetPrefab.GetComponentsInChildren<MeshFilter>(includeInactive);
 
                 foreach (var meshFilter in newMeshFilters)
                 {
@@ -185,12 +208,32 @@ namespace Microsoft.MixedReality.Toolkit.Editor
             }
         }
 
+        private static byte[] EnocdeTexture2D(Texture2D texture, TextureExtension extension)
+        {
+            switch (extension)
+            {
+                default:
+                case TextureExtension.TGA:
+                    {
+                        return texture.EncodeToTGA();
+                    }
+                case TextureExtension.PNG:
+                    {
+                        return texture.EncodeToPNG();
+                    }
+                case TextureExtension.JPG:
+                    {
+                        return texture.EncodeToJPG();
+                    }
+            }
+        }
+
         private static string AppendToFileName(string source, string appendValue)
         {
             return $"{Path.Combine(Path.GetDirectoryName(source), Path.GetFileNameWithoutExtension(source))}{appendValue}{Path.GetExtension(source)}";
         }
 
-        private static void Save(GameObject targetPrefab, MeshUtility.MeshCombineResult result)
+        private void Save(MeshUtility.MeshCombineResult result)
         {
             if (result.Mesh == null)
             {
@@ -224,11 +267,11 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
                         DestroyImmediate(pair.Texture);
 
-                        var textureData = decompressedTexture.EncodeToTGA();
+                        var textureData = EnocdeTexture2D(decompressedTexture, textureExtension);
 
                         DestroyImmediate(decompressedTexture);
 
-                        var texturePath = AppendToFileName(Path.ChangeExtension(path, ".tga"), pair.Property);
+                        var texturePath = AppendToFileName(Path.ChangeExtension(path, textureExtensionNames[(int)textureExtension]), pair.Property);
                         File.WriteAllBytes(texturePath, textureData);
 
                         AssetDatabase.Refresh();

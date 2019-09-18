@@ -39,7 +39,6 @@ namespace Microsoft.MixedReality.Toolkit.Editor
         public class MeshCombineSettings
         {
             public List<MeshFilter> MeshFilters = new List<MeshFilter>();
-            public bool IncludeInactive = false;
             public bool BakeMeshIDIntoUVChannel = true;
             public int MeshIDUVChannel = 3;
             public bool BakeMaterialColorIntoVertexColor = true;
