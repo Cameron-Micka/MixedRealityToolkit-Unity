@@ -93,7 +93,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                     if (settings.BakeMeshIDIntoUVChannel)
                     {
                         EditorGUI.indentLevel += editorGUIIndentAmmount;
-                        settings.MeshIDUVChannel = EditorGUILayout.IntSlider("UV Channel", settings.MeshIDUVChannel, 1, 3);
+                        settings.Channel = (MeshUtility.MeshCombineSettings.UVChannel)EditorGUILayout.EnumPopup("UV Channel", settings.Channel);
                         EditorGUI.indentLevel -= editorGUIIndentAmmount;
                     }
                 }
