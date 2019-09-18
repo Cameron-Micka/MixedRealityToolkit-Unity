@@ -21,10 +21,23 @@ namespace Microsoft.MixedReality.Toolkit.Editor
             public int MeshIDUVChannel = 3;
             public bool BakeMaterialColorIntoVertexColor = true;
 
+            public enum TextureUsage
+            {
+                Color = 0,
+                Normal = 1
+            }
+
+            public static readonly Color[] TextureUsageDefault = new Color[]
+            {
+                new Color(1.0f, 1.0f, 1.0f, 1.0f),
+                new Color(0.498f, 0.498f, 1.0f, 1.0f)
+            };
+
             [System.Serializable]
             public class TextureSetting
             {
                 public string TextureProperty = "Name";
+                public TextureUsage Usage = TextureUsage.Color;
                 [Range(2, 4096)]
                 public int Resolution = 2048;
                 [Range(0, 256)]
@@ -33,8 +46,8 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
             public List<TextureSetting> TextureSettings = new List<TextureSetting>()
             {
-                new TextureSetting() { TextureProperty = "_MainTex", Resolution = 2048, Padding = 4 },
-                new TextureSetting() { TextureProperty = "_NormalMap",  Resolution = 2048, Padding = 4 }
+                new TextureSetting() { TextureProperty = "_MainTex", Usage = TextureUsage.Color, Resolution = 2048, Padding = 4 },
+                new TextureSetting() { TextureProperty = "_NormalMap", Usage = TextureUsage.Normal, Resolution = 2048, Padding = 4 }
             };
 
             public bool RequiresMaterialData()
@@ -75,7 +88,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
         {
             var window = GetWindow<MeshCombinerWindow>();
             window.settings = CreateInstance<MeshCombineSettings>();
-            window.titleContent = new GUIContent("Mesh Combiner");
+            window.titleContent = new GUIContent("Mesh Combiner", EditorGUIUtility.IconContent("d_Particle Effect").image);
             window.minSize = new Vector2(480.0f, 640.0f);
             window.Show();
         }
@@ -117,7 +130,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                 GUILayout.Label("Export", EditorStyles.boldLabel);
 
                 var previousLabelWidth = EditorGUIUtility.labelWidth;
-                var newLabelWidth = EditorGUIUtility.currentViewWidth - 30;
+                var newLabelWidth = EditorGUIUtility.currentViewWidth - 32;
 
                 EditorGUIUtility.labelWidth = newLabelWidth;
                 settings.IncludeInactive = EditorGUILayout.Toggle("Include Inactive", settings.IncludeInactive);
@@ -170,11 +183,11 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                EditorGUILayout.LabelField("Mixed Reality Toolkit Mesh Combiner", EditorStyles.boldLabel);
+                EditorGUILayout.LabelField("Mixed Reality Toolkit Mesh Combiner Window", EditorStyles.boldLabel);
                 InspectorUIUtility.RenderDocumentationButton(meshCombinerWindow_URL);
             }
 
-            EditorGUILayout.LabelField("TODO", EditorStyles.wordWrappedLabel);
+            EditorGUILayout.LabelField("This tool automatically combines meshes and materials to help reduce scene complexity and draw call count.", EditorStyles.wordWrappedLabel);
 
             EditorGUILayout.Space();
         }
@@ -374,11 +387,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                     var atlas = new Texture2D(textureSetting.Resolution, textureSetting.Resolution);
                     output.Add(textureSetting.TextureProperty, atlas);
                     var rects = atlas.PackTextures(textures, textureSetting.Padding, textureSetting.Resolution);
-
-                    // Unity's PackTextures method defaults to black for areas that do not contain texture data. Because Unity's material 
-                    // system defaults to a white texture for materials that do not have texture specified we need to fill in areas of the 
-                    // atlas without texture data to white.
-                    FillUnusedPixels(atlas, rects, Color.white);
+                    PostprocessTexture(atlas, rects, textureSetting.Usage);
 
                     if (!uvsAltered)
                     {
@@ -457,9 +466,9 @@ namespace Microsoft.MixedReality.Toolkit.Editor
             return output;
         }
 
-        private static void FillUnusedPixels(Texture2D texture, Rect[] usedRects, Color fillColor)
+        private static void PostprocessTexture(Texture2D texture, Rect[] usedRects, MeshCombineSettings.TextureUsage usage)
         {
-            var pixels = texture.GetPixels32();
+            var pixels = texture.GetPixels();
             var width = texture.width;
             var height = texture.height;
 
@@ -479,14 +488,29 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                         }
                     }
 
-                    if (!usedPixel)
+                    if (usedPixel)
                     {
-                        pixels[(y * width) + x] = fillColor;
+                        if (usage == MeshCombineSettings.TextureUsage.Normal)
+                        {
+                            // Apply Unity's UnpackNormalDXT5nm method to go from DXTnm to RGB.
+                            var c = pixels[(y * width) + x];
+                            c.r = c.a;
+                            Vector2 normal = new Vector2(c.r, c.g);
+                            c.b = (Mathf.Sqrt(1.0f - Mathf.Clamp01(Vector2.Dot(normal, normal))) * 0.5f) + 0.5f;
+                            pixels[(y * width) + x] = c;
+                        }
+                    }
+                    else
+                    {
+                        // Unity's PackTextures method defaults to black for areas that do not contain texture data. Because Unity's material 
+                        // system defaults to a white texture for color textures (and a 'suitable' normal for normal textures) that do not have texture 
+                        // specified, we need to fill in areas of the atlas with appropriate defaults.
+                        pixels[(y * width) + x] = MeshCombineSettings.TextureUsageDefault[(int)usage];
                     }
                 }
             }
 
-            texture.SetPixels32(pixels);
+            texture.SetPixels(pixels);
             texture.Apply();
         }
 
