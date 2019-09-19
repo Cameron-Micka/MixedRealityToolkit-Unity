@@ -34,7 +34,6 @@ namespace Microsoft.MixedReality.Toolkit.Editor
         private static void ShowWindow()
         {
             var window = GetWindow<MeshCombinerWindow>();
-            window.settingsObject = CreateInstance<MeshCombineSettingsObject>();
             window.titleContent = new GUIContent("Mesh Combiner", EditorGUIUtility.IconContent("d_Particle Effect").image);
             window.minSize = new Vector2(480.0f, 540.0f);
             window.Show();
@@ -44,6 +43,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
         {
             DrawHeader();
 
+            settingsObject = settingsObject ?? CreateInstance<MeshCombineSettingsObject>();
             var settings = settingsObject.Context;
             var settingsSerializedObject = new SerializedObject(settingsObject);
 
@@ -84,7 +84,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                 EditorGUILayout.BeginVertical("Box");
                 {
                     var previousLabelWidth = EditorGUIUtility.labelWidth;
-                    EditorGUIUtility.labelWidth = EditorGUIUtility.currentViewWidth - 36;
+                    EditorGUIUtility.labelWidth = EditorGUIUtility.currentViewWidth - 42;
                     includeInactive = EditorGUILayout.Toggle("Include Inactive", includeInactive);
                     settings.BakeMaterialColorIntoVertexColor = EditorGUILayout.Toggle("Bake Material Color Into Vertex Color", settings.BakeMaterialColorIntoVertexColor);
                     settings.BakeMeshIDIntoUVChannel = EditorGUILayout.Toggle("Bake Mesh ID Into UV Channel", settings.BakeMeshIDIntoUVChannel);
@@ -93,7 +93,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                     if (settings.BakeMeshIDIntoUVChannel)
                     {
                         EditorGUI.indentLevel += editorGUIIndentAmmount;
-                        settings.Channel = (MeshUtility.MeshCombineSettings.UVChannel)EditorGUILayout.EnumPopup("UV Channel", settings.Channel);
+                        settings.MeshIDUVChannel = (MeshUtility.MeshCombineSettings.UVChannel)EditorGUILayout.EnumPopup("UV Channel", settings.MeshIDUVChannel);
                         EditorGUI.indentLevel -= editorGUIIndentAmmount;
                     }
                 }
@@ -106,6 +106,11 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                     textureSettingsScrollPosition = EditorGUILayout.BeginScrollView(textureSettingsScrollPosition);
                     {
                         EditorGUILayout.PropertyField(settingsSerializedObject.FindProperty("Context.TextureSettings"), true);
+
+                        if (settings.TextureSettings.Count > 1)
+                        {
+                            EditorGUILayout.HelpBox("Merging textures requires adjusting UVs. Make sure UVs are remapped properly when merging multiple texture types by having a unique texture present for each property, or choosing different destination channels.", MessageType.Info);
+                        }
                     }
                     EditorGUILayout.EndScrollView();
                 }
@@ -115,7 +120,6 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
                 EditorGUILayout.BeginVertical("Box");
                 {
-
                     EditorGUILayout.Space();
 
                     if (GUILayout.Button("Combine Mesh"))
@@ -259,7 +263,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                 {
                     var pair = result.TextureTable[i];
 
-                    if (pair.Texture != null)
+                    if (pair.Texture != null && !AssetDatabase.Contains(pair.Texture))
                     {
                         var decompressedTexture = new Texture2D(pair.Texture.width, pair.Texture.height, GetUncompressedEquivalent(pair.Texture.format), true);
                         decompressedTexture.SetPixels(pair.Texture.GetPixels());

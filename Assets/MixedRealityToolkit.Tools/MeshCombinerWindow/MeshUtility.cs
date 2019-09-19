@@ -48,7 +48,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
             public List<MeshFilter> MeshFilters = new List<MeshFilter>();
             public bool BakeMeshIDIntoUVChannel = true;
-            public UVChannel Channel = UVChannel.UV3;
+            public UVChannel MeshIDUVChannel = UVChannel.UV3;
             public bool BakeMaterialColorIntoVertexColor = true;
 
             public enum TextureUsage
@@ -57,17 +57,18 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                 Normal = 1
             }
 
-            public static readonly Color[] TextureUsageDefault = new Color[]
+            public static readonly Color[] TextureUsageColorDefault = new Color[]
             {
-                new Color(1.0f, 1.0f, 1.0f, 1.0f),
-                new Color(0.498f, 0.498f, 1.0f, 1.0f)
+                new Color(255.0f / 255.0f, 255.0f / 255.0f, 255.0f / 255.0f, 255.0f / 255.0f),
+                new Color(127.0f / 255.0f, 127.0f / 255.0f, 255.0f / 255.0f, 255.0f / 255.0f)
             };
 
             [System.Serializable]
             public class TextureSetting
             {
                 public string TextureProperty = "Name";
-                public UVChannel UVChannel = UVChannel.UV0;
+                public UVChannel SourceUVChannel = UVChannel.UV0;
+                public UVChannel DestUVChannel = UVChannel.UV0;
                 public TextureUsage Usage = TextureUsage.Color;
                 [Range(2, 4096)]
                 public int Resolution = 2048;
@@ -77,8 +78,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
             public List<TextureSetting> TextureSettings = new List<TextureSetting>()
             {
-                new TextureSetting() { TextureProperty = "_MainTex", Usage = TextureUsage.Color, Resolution = 2048, Padding = 4 },
-                new TextureSetting() { TextureProperty = "_NormalMap", Usage = TextureUsage.Normal, Resolution = 2048, Padding = 4 }
+                new TextureSetting() { TextureProperty = "_MainTex", Usage = TextureUsage.Color, Resolution = 2048, Padding = 4 }
             };
 
             public bool RequiresMaterialData()
@@ -95,6 +95,34 @@ namespace Microsoft.MixedReality.Toolkit.Editor
             {
                 return !RequiresMaterialData() &&
                        !BakeMeshIDIntoUVChannel;
+            }
+
+            private static Texture2D normalTexture = null;
+
+            public static Texture2D GetTextureUsageDefault(TextureUsage usage)
+            {
+                switch (usage)
+                {
+                    default:
+                    case TextureUsage.Color:
+                        {
+                            return Texture2D.whiteTexture;
+                        }
+
+                    case TextureUsage.Normal:
+                        {
+                            if (normalTexture == null)
+                            {
+                                var dimension = 4;
+                                normalTexture = new Texture2D(dimension, dimension);
+                                var normal = TextureUsageColorDefault[(int)usage];
+                                normalTexture.SetPixels(Enumerable.Repeat(new Color(1.0f, normal.g, 1.0f, normal.r), dimension * dimension).ToArray());
+                                normalTexture.Apply();
+                            }
+
+                            return normalTexture;
+                        }
+                }
             }
         }
 
@@ -135,19 +163,17 @@ namespace Microsoft.MixedReality.Toolkit.Editor
             var meshIDTable = new List<MeshCombineResult.MeshIDPair>();
 
             var textureToCombineInstanceMappings = new List<Dictionary<Texture2D, List<CombineInstance>>>(settings.TextureSettings.Count);
-            var texturelessCombineInstances = new List<List<CombineInstance>>();
 
             foreach (var textureSetting in settings.TextureSettings)
             {
                 textureToCombineInstanceMappings.Add(new Dictionary<Texture2D, List<CombineInstance>>());
-                texturelessCombineInstances.Add(new List<CombineInstance>());
             }
 
-            var vertexCount = GatherCombineData(settings, combineInstances, meshIDTable, textureToCombineInstanceMappings, texturelessCombineInstances);
+            var vertexCount = GatherCombineData(settings, combineInstances, meshIDTable, textureToCombineInstanceMappings);
 
             if (vertexCount != 0)
             {
-                output.TextureTable = CombineTextures(settings, textureToCombineInstanceMappings, texturelessCombineInstances);
+                output.TextureTable = CombineTextures(settings, textureToCombineInstanceMappings);
                 output.Mesh = CombineMeshes(combineInstances, vertexCount);
                 output.Material = CombineMaterials(settings, output.TextureTable);
                 output.MeshIDTable = meshIDTable;
@@ -165,8 +191,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
         private static uint GatherCombineData(MeshCombineSettings settings,
                                              List<CombineInstance> combineInstances,
                                              List<MeshCombineResult.MeshIDPair> meshIDTable,
-                                             List<Dictionary<Texture2D, List<CombineInstance>>> textureToCombineInstanceMappings,
-                                             List<List<CombineInstance>> texturelessCombineInstances)
+                                             List<Dictionary<Texture2D, List<CombineInstance>>> textureToCombineInstanceMappings)
         {
             var meshID = 0;
             var vertexCount = 0U;
@@ -186,7 +211,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                 {
                     // Write the MeshID to each a UV channel.
                     ++meshID;
-                    combineInstance.mesh.SetUVs((int)settings.Channel, Enumerable.Repeat(new Vector2(meshID, 0.0f), combineInstance.mesh.vertexCount).ToList());
+                    combineInstance.mesh.SetUVs((int)settings.MeshIDUVChannel, Enumerable.Repeat(new Vector2(meshID, 0.0f), combineInstance.mesh.vertexCount).ToList());
                 }
 
                 if (settings.RequiresMaterialData())
@@ -207,23 +232,17 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                         {
                             // Map textures to CombineInstances
                             var texture = material.GetTexture(textureSetting.TextureProperty) as Texture2D;
+                            texture = texture ?? MeshCombineSettings.GetTextureUsageDefault(textureSetting.Usage);
 
-                            if (texture != null)
+                            List<CombineInstance> combineInstanceMappings;
+
+                            if (textureToCombineInstanceMappings[textureSettingIndex].TryGetValue(texture, out combineInstanceMappings))
                             {
-                                List<CombineInstance> combineInstanceMappings;
-
-                                if (textureToCombineInstanceMappings[textureSettingIndex].TryGetValue(texture, out combineInstanceMappings))
-                                {
-                                    combineInstanceMappings.Add(combineInstance);
-                                }
-                                else
-                                {
-                                    textureToCombineInstanceMappings[textureSettingIndex][texture] = new List<CombineInstance>(new CombineInstance[] { combineInstance });
-                                }
+                                combineInstanceMappings.Add(combineInstance);
                             }
                             else
                             {
-                                texturelessCombineInstances[textureSettingIndex].Add(combineInstance);
+                                textureToCombineInstanceMappings[textureSettingIndex][texture] = new List<CombineInstance>(new CombineInstance[] { combineInstance });
                             }
 
                             ++textureSettingIndex;
@@ -242,64 +261,62 @@ namespace Microsoft.MixedReality.Toolkit.Editor
         }
 
         private static List<MeshCombineResult.PropertyTexture2DPair> CombineTextures(MeshCombineSettings settings,
-                                                                             List<Dictionary<Texture2D, List<CombineInstance>>> textureToCombineInstanceMappings,
-                                                                             List<List<CombineInstance>> texturelessCombineInstances)
+                                                                             List<Dictionary<Texture2D, List<CombineInstance>>> textureToCombineInstanceMappings)
         {
             var output = new List<MeshCombineResult.PropertyTexture2DPair>();
             bool[] uvsAltered = new bool[4] { false, false, false, false };
             var textureSettingIndex = 0;
 
-            // TODO, make sure textures across textureToCombineInstanceMappings are the same dimensions.
-
             foreach (var textureSetting in settings.TextureSettings)
             {
                 var mapping = textureToCombineInstanceMappings[textureSettingIndex];
-                int channel = (int)textureSetting.UVChannel;
+                var sourceChannel = (int)textureSetting.SourceUVChannel;
+                var destChannel = (int)textureSetting.DestUVChannel;
 
                 if (mapping.Count != 0)
                 {
                     // Build a texture atlas of the accumulated textures.
-                    var textures = mapping.Keys.ToArray();
-                    var atlas = new Texture2D(textureSetting.Resolution, textureSetting.Resolution);
-                    output.Add(new MeshCombineResult.PropertyTexture2DPair() { Property = textureSetting.TextureProperty, Texture = atlas });
-                    var rects = atlas.PackTextures(textures, textureSetting.Padding, textureSetting.Resolution);
-                    PostprocessTexture(atlas, rects, textureSetting.Usage);
+                    var textures = mapping.Keys.ToList();
 
-                    if (!uvsAltered[channel])
+                    if (textures.Count > 1)
                     {
-                        // Remap the current UVs to their respective rects in the texture atlas.
-                        for (var i = 0; i < textures.Length; ++i)
+                        var atlas = new Texture2D(textureSetting.Resolution, textureSetting.Resolution);
+                        output.Add(new MeshCombineResult.PropertyTexture2DPair() { Property = textureSetting.TextureProperty, Texture = atlas });
+                        var rects = atlas.PackTextures(textures.ToArray(), textureSetting.Padding, textureSetting.Resolution);
+                        PostprocessTexture(atlas, rects, textureSetting.Usage);
+
+                        if (!uvsAltered[destChannel])
                         {
-                            var rect = rects[i];
-
-                            foreach (var combineInstance in mapping[textures[i]])
+                            // Remap the current UVs to their respective rects in the texture atlas.
+                            for (var i = 0; i < textures.Count; ++i)
                             {
-                                var uvs = new List<Vector2>();
-                                combineInstance.mesh.GetUVs(channel, uvs);
-                                var remappedUvs = new List<Vector2>(uvs.Count);
+                                var rect = rects[i];
 
-                                for (var j = 0; j < uvs.Count; ++j)
+                                foreach (var combineInstance in mapping[textures[i]])
                                 {
-                                    remappedUvs.Add(new Vector2(Mathf.Lerp(rect.xMin, rect.xMax, uvs[j].x),
-                                                                Mathf.Lerp(rect.yMin, rect.yMax, uvs[j].y)));
-                                }
+                                    var uvs = new List<Vector2>();
+                                    combineInstance.mesh.GetUVs(sourceChannel, uvs);
+                                    var remappedUvs = new List<Vector2>(uvs.Count);
 
-                                combineInstance.mesh.SetUVs(channel, remappedUvs);
+                                    for (var j = 0; j < uvs.Count; ++j)
+                                    {
+                                        remappedUvs.Add(new Vector2(Mathf.Lerp(rect.xMin, rect.xMax, uvs[j].x),
+                                                                    Mathf.Lerp(rect.yMin, rect.yMax, uvs[j].y)));
+                                    }
+
+                                    combineInstance.mesh.SetUVs(destChannel, remappedUvs);
+                                }
                             }
+
+                            uvsAltered[destChannel] = true;
                         }
                     }
-                }
-
-                if (!uvsAltered[channel])
-                {
-                    // Meshes without a texture should sample the last pixel in the atlas.
-                    foreach (var combineInstance in texturelessCombineInstances[textureSettingIndex])
+                    else
                     {
-                        combineInstance.mesh.SetUVs(channel, Enumerable.Repeat(new Vector2(1.0f, 1.0f), combineInstance.mesh.vertexCount).ToList());
+                        output.Add(new MeshCombineResult.PropertyTexture2DPair() { Property = textureSetting.TextureProperty, Texture = textures[0] });
                     }
                 }
 
-                uvsAltered[channel] = true;
                 ++textureSettingIndex;
             }
 
@@ -385,7 +402,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                         // Unity's PackTextures method defaults to black for areas that do not contain texture data. Because Unity's material 
                         // system defaults to a white texture for color textures (and a 'suitable' normal for normal textures) that do not have texture 
                         // specified, we need to fill in areas of the atlas with appropriate defaults.
-                        pixels[(y * width) + x] = MeshCombineSettings.TextureUsageDefault[(int)usage];
+                        pixels[(y * width) + x] = MeshCombineSettings.TextureUsageColorDefault[(int)usage];
                     }
                 }
             }
