@@ -17,22 +17,23 @@ namespace Microsoft.MixedReality.Toolkit.Editor
             public Material Material = null;
 
             [System.Serializable]
-            public struct PropertyTexture2DPair
+            public struct PropertyTexture2DID
             {
                 public string Property;
                 public Texture2D Texture;
             }
 
-            public List<PropertyTexture2DPair> TextureTable = new List<PropertyTexture2DPair>();
+            public List<PropertyTexture2DID> TextureTable = new List<PropertyTexture2DID>();
 
             [System.Serializable]
-            public struct MeshIDPair
+            public struct MeshID
             {
                 public Mesh Mesh;
+                public int MeshFilterID;
                 public int VertexAttributeID;
             }
 
-            public List<MeshIDPair> MeshIDTable = new List<MeshIDPair>();
+            public List<MeshID> MeshIDTable = new List<MeshID>();
         }
 
         [System.Serializable]
@@ -160,7 +161,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
             var output = new MeshCombineResult();
 
             var combineInstances = new List<CombineInstance>();
-            var meshIDTable = new List<MeshCombineResult.MeshIDPair>();
+            var meshIDTable = new List<MeshCombineResult.MeshID>();
 
             var textureToCombineInstanceMappings = new List<Dictionary<Texture2D, List<CombineInstance>>>(settings.TextureSettings.Count);
 
@@ -190,7 +191,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
         private static uint GatherCombineData(MeshCombineSettings settings,
                                              List<CombineInstance> combineInstances,
-                                             List<MeshCombineResult.MeshIDPair> meshIDTable,
+                                             List<MeshCombineResult.MeshID> meshIDTable,
                                              List<Dictionary<Texture2D, List<CombineInstance>>> textureToCombineInstanceMappings)
         {
             var meshID = 0;
@@ -254,16 +255,16 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                 vertexCount += (uint)combineInstance.mesh.vertexCount;
 
                 combineInstances.Add(combineInstance);
-                meshIDTable.Add(new MeshCombineResult.MeshIDPair() { Mesh = meshFilter.sharedMesh, VertexAttributeID = meshID });
+                meshIDTable.Add(new MeshCombineResult.MeshID() { Mesh = meshFilter.sharedMesh, MeshFilterID = meshFilter.GetInstanceID(), VertexAttributeID = meshID });
             }
 
             return vertexCount;
         }
 
-        private static List<MeshCombineResult.PropertyTexture2DPair> CombineTextures(MeshCombineSettings settings,
+        private static List<MeshCombineResult.PropertyTexture2DID> CombineTextures(MeshCombineSettings settings,
                                                                              List<Dictionary<Texture2D, List<CombineInstance>>> textureToCombineInstanceMappings)
         {
-            var output = new List<MeshCombineResult.PropertyTexture2DPair>();
+            var output = new List<MeshCombineResult.PropertyTexture2DID>();
             bool[] uvsAltered = new bool[4] { false, false, false, false };
             var textureSettingIndex = 0;
 
@@ -281,7 +282,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                     if (textures.Count > 1)
                     {
                         var atlas = new Texture2D(textureSetting.Resolution, textureSetting.Resolution);
-                        output.Add(new MeshCombineResult.PropertyTexture2DPair() { Property = textureSetting.TextureProperty, Texture = atlas });
+                        output.Add(new MeshCombineResult.PropertyTexture2DID() { Property = textureSetting.TextureProperty, Texture = atlas });
                         var rects = atlas.PackTextures(textures.ToArray(), textureSetting.Padding, textureSetting.Resolution);
                         PostprocessTexture(atlas, rects, textureSetting.Usage);
 
@@ -313,7 +314,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
                     }
                     else
                     {
-                        output.Add(new MeshCombineResult.PropertyTexture2DPair() { Property = textureSetting.TextureProperty, Texture = textures[0] });
+                        output.Add(new MeshCombineResult.PropertyTexture2DID() { Property = textureSetting.TextureProperty, Texture = textures[0] });
                     }
                 }
 
@@ -332,7 +333,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
             return output;
         }
 
-        private static Material CombineMaterials(MeshCombineSettings settings, List<MeshCombineResult.PropertyTexture2DPair> textureTable)
+        private static Material CombineMaterials(MeshCombineSettings settings, List<MeshCombineResult.PropertyTexture2DID> textureTable)
         {
             var output = new Material(StandardShaderUtility.MrtkStandardShader);
 

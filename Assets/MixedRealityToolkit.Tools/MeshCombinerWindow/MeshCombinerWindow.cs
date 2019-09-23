@@ -280,7 +280,7 @@ namespace Microsoft.MixedReality.Toolkit.Editor
 
                         AssetDatabase.Refresh();
 
-                        result.TextureTable[i] = new MeshUtility.MeshCombineResult.PropertyTexture2DPair()
+                        result.TextureTable[i] = new MeshUtility.MeshCombineResult.PropertyTexture2DID()
                         {
                             Property = pair.Property,
                             Texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath)
