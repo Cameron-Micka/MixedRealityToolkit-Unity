@@ -7,7 +7,7 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
 {
     /// <summary>
     /// Follow solver positions an element relative in front of the forward axis of the reference.
-    /// The element can be loosly constrained (a.k.a. tag-along) so that it doesn't follow until it is too far.
+    /// The element can be loosely constrained (a.k.a. tag-along) so that it doesn't follow until it is too far.
     /// </summary>
     public class Follow : Solver
     {
@@ -38,11 +38,11 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
         }
 
         [SerializeField]
-        [Tooltip("Min distance from eye to position element around, i.e. the sphere radius")]
+        [Tooltip("Min distance from tracked target to position element around, i.e. the sphere radius")]
         private float minDistance = 1f;
 
         /// <summary>
-        /// Min distance from eye to position element around, i.e. the sphere radius.
+        /// Min distance from tracked target to position element around, i.e. the sphere radius.
         /// </summary>
         public float MinDistance
         {
@@ -51,11 +51,11 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
         }
 
         [SerializeField]
-        [Tooltip("Max distance from eye to element")]
+        [Tooltip("Max distance from tracked target to element")]
         private float maxDistance = 2f;
 
         /// <summary>
-        /// Max distance from eye to element.
+        /// Max distance from tracked target to element.
         /// </summary>
         public float MaxDistance
         {
@@ -64,7 +64,7 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
         }
 
         [SerializeField]
-        [Tooltip("Min distance from eye to position element around, i.e. the sphere radius")]
+        [Tooltip("Min distance from tracked target to position element around, i.e. the sphere radius")]
         private float defaultDistance = 1f;
 
         /// <summary>
@@ -190,6 +190,7 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
         private Quaternion ReferenceRotation => SolverHandler.TransformTarget != null ? SolverHandler.TransformTarget.rotation : Quaternion.identity;
         private Vector3 PreviousReferencePosition = Vector3.zero;
         private Quaternion PreviousReferenceRotation = Quaternion.identity;
+        private Quaternion PreviousGoalRotation = Quaternion.identity;
         private bool recenterNextUpdate = true;
 
         protected override void OnEnable()
@@ -203,7 +204,7 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
         {
             Vector3 refPosition = Vector3.zero;
             Quaternion refRotation = Quaternion.identity;
-            Vector3 refForward = Vector3.zero;
+            Vector3 refForward = Vector3.zero; // TODO, do we need this?
             GetReferenceInfo(
                 PreviousReferencePosition,
                 ReferencePosition,
@@ -271,11 +272,12 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
                 orientation,
                 orientToControllerDeadzoneDegrees,
                 goalPosition,
-                GoalRotation,
+                PreviousGoalRotation,
                 ref goalRotation);
 
             GoalPosition = goalPosition;
             GoalRotation = goalRotation;
+            PreviousGoalRotation = goalRotation;
 
             PreviousReferencePosition = refPosition;
             PreviousReferenceRotation = refRotation;
@@ -404,6 +406,13 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
             }
 
             refForward = rotation * Vector3.forward;
+
+            // TODO: Fix? for stuck behind head issue
+            if (Vector3.Dot(refForward, CameraCache.Main.transform.forward) < 0)
+            {
+                refForward *= -1;
+            }
+
             return angularClamped;
         }
 
