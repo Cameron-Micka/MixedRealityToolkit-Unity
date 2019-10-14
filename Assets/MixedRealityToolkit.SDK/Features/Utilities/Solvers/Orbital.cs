@@ -100,7 +100,7 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
             desiredPos = desiredPos + (SnapToTetherAngleSteps(targetRot) * LocalOffset);
             desiredPos = desiredPos + (SnapToTetherAngleSteps(yawOnlyRot) * WorldOffset);
 
-            Quaternion desiredRot = CalculateDesiredRotation(desiredPos);
+            Quaternion desiredRot = CalculateDesiredRotation(desiredPos, GoalRotation);
 
             GoalPosition = desiredPos;
             GoalRotation = desiredRot;
@@ -122,7 +122,7 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
             return Quaternion.Euler(rotationToSnap.eulerAngles.x, newAngle, rotationToSnap.eulerAngles.z);
         }
 
-        private Quaternion CalculateDesiredRotation(Vector3 desiredPos)
+        private Quaternion CalculateDesiredRotation(Vector3 desiredPos, Quaternion previousGoalRotation)
         {
             Quaternion desiredRot = Quaternion.identity;
 
@@ -146,6 +146,9 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
                     break;
                 case SolverOrientationType.FollowTrackedObject:
                     desiredRot = SolverHandler.TransformTarget != null ? SolverHandler.TransformTarget.rotation : Quaternion.identity;
+                    break;
+                case SolverOrientationType.MaintainGoal:
+                    desiredRot = previousGoalRotation;
                     break;
                 default:
                     Debug.LogError($"Invalid OrientationType for Orbital Solver on {gameObject.name}");
