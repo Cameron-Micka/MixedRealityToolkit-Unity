@@ -147,9 +147,6 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
                 case SolverOrientationType.FollowTrackedObject:
                     desiredRot = SolverHandler.TransformTarget != null ? SolverHandler.TransformTarget.rotation : Quaternion.identity;
                     break;
-                case SolverOrientationType.MaintainGoal:
-                    desiredRot = previousGoalRotation;
-                    break;
                 default:
                     Debug.LogError($"Invalid OrientationType for Orbital Solver on {gameObject.name}");
                     break;

@@ -726,7 +726,7 @@ GameObject:
   - component: {fileID: 6901291719397127952}
   - component: {fileID: 260466191685692226}
   - component: {fileID: 1375880285230804054}
-  - component: {fileID: 8448787082153994864}
+  - component: {fileID: 7391897318830160397}
   m_Layer: 0
   m_Name: MixedRealityKeyboardPreview
   m_TagString: Untagged
@@ -785,8 +785,8 @@ MonoBehaviour:
   transformOverride: {fileID: 0}
   additionalOffset: {x: 0, y: 0, z: 0}
   additionalRotation: {x: 0, y: 0, z: 0}
-  updateSolvers: 0
---- !u!114 &8448787082153994864
+  updateSolvers: 1
+--- !u!114 &7391897318830160397
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -795,27 +795,29 @@ MonoBehaviour:
   m_GameObject: {fileID: 7980448365335647764}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4684083f6dff4a1d8a790bccc354fcf4, type: 3}
+  m_Script: {fileID: 11500000, guid: 2a67486b27300914ba3a3382853cfea6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   updateLinkedTransform: 0
-  moveLerpTime: 0.5
-  rotateLerpTime: 0.5
+  moveLerpTime: 0.05
+  rotateLerpTime: 0.2
   scaleLerpTime: 0
   maintainScale: 1
   smoothing: 1
   lifetime: 0
-  referenceDirection: 1
-  minDistance: 0.3
-  maxDistance: 0.6
-  minViewDegrees: 0
-  maxViewDegrees: 15
-  aspectV: 1
+  moveToDefaultDistanceLerpTime: 0.05
+  orientationType: 3
+  minDistance: 0.45
+  maxDistance: 0.78
+  defaultDistance: 0.58
+  maxViewHorizontalDegrees: 70
+  maxViewVerticalDegrees: 70
+  orientToControllerDeadzoneDegrees: 60
   ignoreAngleClamp: 0
   ignoreDistanceClamp: 0
-  useFixedVerticalPosition: 1
-  fixedVerticalPosition: -0.1
-  orientToReferenceDirection: 0
+  ignoreReferencePitchAndRoll: 1
+  pitchOffset: 0
+  verticalMaxDistance: 0.1
 --- !u!1001 &1090913102773355362
 PrefabInstance:
   m_ObjectHideFlags: 0

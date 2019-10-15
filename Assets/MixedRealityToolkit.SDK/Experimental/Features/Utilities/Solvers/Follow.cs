@@ -1,16 +1,19 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using Microsoft.MixedReality.Toolkit.Utilities;
+using Microsoft.MixedReality.Toolkit.Utilities.Solvers;
 using UnityEngine;
 
-namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
+namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
 {
     /// <summary>
-    /// Follow solver positions an element relative in front of the forward axis of the reference.
+    /// Follow solver positions an element relative in front of the forward axis of the tracked target.
     /// The element can be loosely constrained (a.k.a. tag-along) so that it doesn't follow until it is too far.
     /// </summary>
     public class Follow : Solver
     {
+        [Experimental]
         [SerializeField]
         [Tooltip("Position lerp multiplier")]
         private float moveToDefaultDistanceLerpTime = 0.1f;
@@ -23,10 +26,10 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
             get { return moveToDefaultDistanceLerpTime; }
             set { moveToDefaultDistanceLerpTime = value; }
         }
-        
+
         [SerializeField]
         [Tooltip("The desired orientation of this object")]
-        private SolverOrientationType orientationType = SolverOrientationType.MaintainGoal;
+        private SolverOrientationType orientationType = SolverOrientationType.Unmodified;
 
         /// <summary>
         /// The desired orientation of this object.
@@ -190,7 +193,6 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
         private Quaternion ReferenceRotation => SolverHandler.TransformTarget != null ? SolverHandler.TransformTarget.rotation : Quaternion.identity;
         private Vector3 PreviousReferencePosition = Vector3.zero;
         private Quaternion PreviousReferenceRotation = Quaternion.identity;
-        private Quaternion PreviousGoalRotation = Quaternion.identity;
         private bool recenterNextUpdate = true;
 
         protected override void OnEnable()
@@ -272,19 +274,14 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
                 orientation,
                 orientToControllerDeadzoneDegrees,
                 goalPosition,
-                PreviousGoalRotation,
                 ref goalRotation);
-
-            GoalPosition = goalPosition;
-            GoalRotation = goalRotation;
-            PreviousGoalRotation = goalRotation;
 
             PreviousReferencePosition = refPosition;
             PreviousReferenceRotation = refRotation;
             recenterNextUpdate = false;
 
-            UpdateWorkingPositionToGoal();
-            UpdateWorkingRotationToGoal();
+            GoalPosition = goalPosition;
+            GoalRotation = goalRotation;
         }
 
         float AngleBetweenOnXZPlane(Vector3 from, Vector3 to)
@@ -496,19 +493,15 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
             SolverOrientationType defaultOrientationType,
             float orientToControllerDeadzoneRadians,
             Vector3 goalPosition,
-            Quaternion previousGoalRotation,
             ref Quaternion orientation)
         {
-            if (defaultOrientationType == SolverOrientationType.MaintainGoal)
+            Vector3 nodeToCamera = goalPosition - ReferencePosition;
+            float angle = Mathf.Abs(AngleBetweenOnXZPlane(transform.forward, nodeToCamera));
+            if (angle > orientToControllerDeadzoneRadians)
             {
-                Vector3 nodeToCamera = goalPosition - ReferencePosition;
-                float angle = Mathf.Abs(AngleBetweenOnXZPlane(transform.forward,nodeToCamera));
-                if (angle > orientToControllerDeadzoneRadians)
-                {
-                    defaultOrientationType = SolverOrientationType.FaceTrackedObject;
-                }
+                defaultOrientationType = SolverOrientationType.FaceTrackedObject;
             }
-            
+
             switch (defaultOrientationType)
             {
                 case SolverOrientationType.YawOnly:
@@ -516,7 +509,7 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
                     orientation = Quaternion.Euler(0f, targetYRotation, 0f);
                     break;
                 case SolverOrientationType.Unmodified:
-                    orientation = transform.rotation;
+                    orientation = GoalRotation;
                     break;
                 case SolverOrientationType.CameraAligned:
                     orientation = CameraCache.Main.transform.rotation;
@@ -529,9 +522,6 @@ namespace Microsoft.MixedReality.Toolkit.Utilities.Solvers
                     break;
                 case SolverOrientationType.FollowTrackedObject:
                     orientation = SolverHandler.TransformTarget != null ? ReferenceRotation : Quaternion.identity;
-                    break;
-                case SolverOrientationType.MaintainGoal:
-                    orientation = previousGoalRotation;
                     break;
                 default:
                     Debug.LogError($"Invalid OrientationType for Orbital Solver on {gameObject.name}");

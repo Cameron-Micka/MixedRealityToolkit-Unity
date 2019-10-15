@@ -82,10 +82,10 @@ namespace Microsoft.MixedReality.Toolkit.Examples.Demos
         {
             DestroySolver();
 
-            AddSolver<Follow>();
+            AddSolver<Experimental.Utilities.Solvers.Follow>();
 
             // Modify properties of solver custom to this example
-            var follow = currentSolver as Follow;
+            var follow = currentSolver as Experimental.Utilities.Solvers.Follow;
             follow.PitchOffset = 10.0f;
             follow.IgnoreReferencePitchAndRoll = true;
         }
