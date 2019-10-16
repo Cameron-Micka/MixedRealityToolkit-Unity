@@ -15,19 +15,6 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
     {
         [Experimental]
         [SerializeField]
-        [Tooltip("Position lerp multiplier")]
-        private float moveToDefaultDistanceLerpTime = 0.1f;
-
-        /// <summary>
-        /// Position lerp multiplier.
-        /// </summary>
-        public float MoveToDefaultDistanceLerpTime
-        {
-            get { return moveToDefaultDistanceLerpTime; }
-            set { moveToDefaultDistanceLerpTime = value; }
-        }
-
-        [SerializeField]
         [Tooltip("The desired orientation of this object")]
         private SolverOrientationType orientationType = SolverOrientationType.Unmodified;
 
@@ -77,6 +64,28 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
         {
             get { return defaultDistance; }
             set { defaultDistance = value; }
+        }
+
+        /// <summary>
+        /// TODO
+        /// </summary>
+        public enum AngularClampType
+        {
+            Bounds = 0,
+            ViewDegrees = 1
+        }
+
+        [SerializeField]
+        [Tooltip("TODO")]
+        private AngularClampType angularClampMode = AngularClampType.Bounds;
+
+        /// <summary>
+        /// TODO
+        /// </summary>
+        public AngularClampType AngularClampMode
+        {
+            get { return angularClampMode; }
+            set { angularClampMode = value; }
         }
 
         [SerializeField]
@@ -259,7 +268,6 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
                     currentPosition,
                     refPosition,
                     goalDirection,
-                    angularClamped,
                     ref goalPosition);
 
                 if (distanceClamped)
@@ -280,7 +288,12 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
             PreviousReferenceRotation = refRotation;
             recenterNextUpdate = false;
 
-            GoalPosition = goalPosition;
+            // Avoid drift by not updating the goal when not clamped.
+            if (distanceClamped)
+            {
+                GoalPosition = goalPosition;
+            }
+
             GoalRotation = goalRotation;
         }
 
@@ -386,6 +399,12 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
                 Vector3 min = Quaternion.AngleAxis(-maxHorizontalDegrees * 0.5f, Vector3.up) * refForward;
                 Vector3 max = Quaternion.AngleAxis(maxHorizontalDegrees * 0.5f, Vector3.up) * refForward;
 
+                // DEBUG
+                Debug.DrawLine(refPosition, refPosition + toTarget, Color.yellow);
+                Debug.DrawLine(refPosition, refPosition + min, Color.green);
+                Debug.DrawLine(refPosition, refPosition + max, Color.magenta);
+                // DEBUG
+
                 // These are negated because Unity is left-handed
                 float minAngle = -AngleBetweenOnXZPlane(toTarget, min);
                 float maxAngle = -AngleBetweenOnXZPlane(toTarget, max);
@@ -421,7 +440,6 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
             Vector3 currentPosition,
             Vector3 refPosition,
             Vector3 refForward,
-            bool interpolateToDefaultDistance,
             ref Vector3 clampedPosition)
         {
             float clampedDistance;
@@ -451,16 +469,6 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
 
                 desiredDistanceXZ = Mathf.Clamp(desiredDistanceXZ, minDistanceXZ, maxDistanceXZ);
 
-                if (interpolateToDefaultDistance)
-                {
-                    Vector3 defaultDistanceXZVector = direction * defaultDistance;
-                    defaultDistanceXZVector.y = 0;
-                    float defaulltDistanceXZ = defaultDistanceXZVector.magnitude;
-                
-                    float interpolationRate = Mathf.Min(moveToDefaultDistanceLerpTime * 60.0f * SolverHandler.DeltaTime, 1.0f);
-                    desiredDistanceXZ = desiredDistanceXZ + (interpolationRate * (defaulltDistanceXZ - desiredDistanceXZ));
-                }
-
                 Vector3 desiredPosition = refPosition + directionXZ * desiredDistanceXZ;
                 float desiredHeight = refPosition.y + refForward.y * maxDistance;
                 desiredPosition.y = desiredHeight;
@@ -473,15 +481,7 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
             }
             else
             {
-                clampedDistance = currentDistance;
-
-                if (interpolateToDefaultDistance)
-                {
-                    float interpolationRate = Mathf.Min(moveToDefaultDistanceLerpTime * 60.0f * SolverHandler.DeltaTime, 1.0f);
-                    clampedDistance = clampedDistance + (interpolationRate * (defaultDistance - clampedDistance));
-                }
-
-                clampedDistance = Mathf.Clamp(clampedDistance, minDistance, maxDistance);
+                clampedDistance = Mathf.Clamp(currentDistance, minDistance, maxDistance);
             }
 
             clampedPosition = refPosition + direction * clampedDistance;

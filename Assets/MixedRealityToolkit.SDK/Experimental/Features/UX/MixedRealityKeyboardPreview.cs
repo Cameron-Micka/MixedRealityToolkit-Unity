@@ -179,7 +179,6 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.UI
 
             if (solver != null)
             {
-                solver.MoveToDefaultDistanceLerpTime = 0.05f;
                 solver.OrientationType = Toolkit.Utilities.SolverOrientationType.Unmodified;
 
                 solver.MinDistance = 0.45f;
