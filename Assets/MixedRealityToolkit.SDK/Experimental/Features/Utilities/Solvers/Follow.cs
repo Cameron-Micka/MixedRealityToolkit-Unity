@@ -3,6 +3,7 @@
 
 using Microsoft.MixedReality.Toolkit.Utilities;
 using Microsoft.MixedReality.Toolkit.Utilities.Solvers;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
@@ -71,13 +72,14 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
         /// </summary>
         public enum AngularClampType
         {
-            Bounds = 0,
-            ViewDegrees = 1
+            ViewDegrees = 0,
+            RendererBounds = 1,
+            ColliderBounds = 2,
         }
 
         [SerializeField]
         [Tooltip("TODO")]
-        private AngularClampType angularClampMode = AngularClampType.Bounds;
+        private AngularClampType angularClampMode = AngularClampType.RendererBounds;
 
         /// <summary>
         /// TODO
@@ -86,6 +88,19 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
         {
             get { return angularClampMode; }
             set { angularClampMode = value; }
+        }
+
+        [SerializeField]
+        [Tooltip("TODO")]
+        private float boundMargin = 1.0f;
+
+        /// <summary>
+        /// TODO
+        /// </summary>
+        public float BoundMargin
+        {
+            get { return boundMargin; }
+            set { boundMargin = value; }
         }
 
         [SerializeField]
@@ -193,6 +208,19 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
             set { verticalMaxDistance = value; }
         }
 
+        [SerializeField]
+        [Tooltip("Enables/disables debug drawing of solver elements (such as angular clamping properties).")]
+        private bool debugDraw = false;
+
+        /// <summary>
+        /// Enables/disables debug drawing of solver elements (such as angular clamping properties).
+        /// </summary>
+        public bool DebugDraw
+        {
+            get { return debugDraw; }
+            set { debugDraw = value; }
+        }
+
         public void Recenter()
         {
             recenterNextUpdate = true;
@@ -232,6 +260,9 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
                 currentPosition = refPosition + refForward * DefaultDistance;
             }
 
+            Bounds bounds;
+            GetBounds(gameObject, angularClampMode, out bounds);
+
             // Angularly clamp to determine goal direction to place the element
             Vector3 goalDirection = refRotation * Vector3.forward;
             SolverOrientationType orientation = orientationType;
@@ -247,6 +278,7 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
                     IgnoreReferencePitchAndRoll,
                     MaxViewHorizontalDegrees,
                     MaxViewVerticalDegrees,
+                    bounds,
                     ref goalDirection);
 
                 if (angularClamped)
@@ -341,6 +373,7 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
             bool ignoreVertical,
             float maxHorizontalDegrees,
             float maxVerticalDegrees,
+            Bounds bounds,
             ref Vector3 refForward)
         {
             Vector3 toTarget = currentPosition - refPosition;
@@ -367,6 +400,8 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
 
             bool angularClamped = false;
 
+            Vector3 extents = bounds.extents * boundMargin;
+
             // X-axis leashing
             // Leashing around the reference's X axis only makes sense if the reference isn't gravity aligned.
             if (ignoreVertical)
@@ -376,8 +411,33 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
             }
             else
             {
-                Vector3 min = Quaternion.AngleAxis(maxVerticalDegrees * 0.5f, refRight) * refForward;
-                Vector3 max = Quaternion.AngleAxis(-maxVerticalDegrees * 0.5f, refRight) * refForward;
+                Vector3 min;
+                Vector3 max;
+
+                switch (angularClampMode)
+                {
+                    default:
+                    case AngularClampType.ViewDegrees:
+                        {
+                            min = Quaternion.AngleAxis(maxVerticalDegrees * 0.5f, refRight) * refForward;
+                            max = Quaternion.AngleAxis(-maxVerticalDegrees * 0.5f, refRight) * refForward;
+                        }
+                        break;
+
+                    case AngularClampType.RendererBounds:
+                    case AngularClampType.ColliderBounds:
+                        {
+                            min = refRotation * new Vector3(0.0f, -extents.y, currentDistance);
+                            max = refRotation * new Vector3(0.0f, extents.y, currentDistance);
+                        }
+                        break;
+                }
+
+                if (debugDraw)
+                {
+                    Debug.DrawLine(refPosition, refPosition + min, Color.blue);
+                    Debug.DrawLine(refPosition, refPosition + max, Color.blue);
+                }
 
                 float minAngle = AngleBetweenOnAxis(toTarget, min, refRight);
                 float maxAngle = AngleBetweenOnAxis(toTarget, max, refRight);
@@ -396,14 +456,39 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
 
             // Y-axis leashing
             {
-                Vector3 min = Quaternion.AngleAxis(-maxHorizontalDegrees * 0.5f, Vector3.up) * refForward;
-                Vector3 max = Quaternion.AngleAxis(maxHorizontalDegrees * 0.5f, Vector3.up) * refForward;
+                Vector3 min;
+                Vector3 max;
 
-                // DEBUG
-                Debug.DrawLine(refPosition, refPosition + toTarget, Color.yellow);
-                Debug.DrawLine(refPosition, refPosition + min, Color.green);
-                Debug.DrawLine(refPosition, refPosition + max, Color.magenta);
-                // DEBUG
+                switch (angularClampMode)
+                {
+                    default:
+                    case AngularClampType.ViewDegrees:
+                        {
+                            min = Quaternion.AngleAxis(-maxHorizontalDegrees * 0.5f, Vector3.up) * refForward;
+                            max = Quaternion.AngleAxis(maxHorizontalDegrees * 0.5f, Vector3.up) * refForward;
+                        }
+                        break;
+
+                    case AngularClampType.RendererBounds:
+                    case AngularClampType.ColliderBounds:
+                        {
+                            min = refRotation * new Vector3(-extents.x, 0.0f, currentDistance);
+                            max = refRotation * new Vector3(extents.x, 0.0f, currentDistance);
+
+                            if (debugDraw)
+                            {
+                                bounds.DebugDraw(Color.red);
+                            }
+                        }
+                        break;
+                }
+
+                if (debugDraw)
+                {
+                    Debug.DrawLine(refPosition, refPosition + toTarget, Color.yellow);
+                    Debug.DrawLine(refPosition, refPosition + min, Color.green);
+                    Debug.DrawLine(refPosition, refPosition + max, Color.green);
+                }
 
                 // These are negated because Unity is left-handed
                 float minAngle = -AngleBetweenOnXZPlane(toTarget, min);
@@ -567,6 +652,25 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
             float sqrMagnitude = (x - y).sqrMagnitude;
 
             return sqrMagnitude > eps;
+        }
+
+        private static bool GetBounds(GameObject target, AngularClampType angularClampType, out Bounds bounds)
+        {
+            switch (angularClampType)
+            {
+                case AngularClampType.RendererBounds:
+                    {
+                        return BoundsExtensions.GetRenderBounds(target, out bounds, 0);
+                    }
+
+                case AngularClampType.ColliderBounds:
+                    {
+                        return BoundsExtensions.GetColliderBounds(target, out bounds, 0);
+                    }
+            }
+
+            bounds = new Bounds();
+            return false;
         }
     }
 }

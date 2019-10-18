@@ -448,5 +448,82 @@ namespace Microsoft.MixedReality.Toolkit.Utilities
             return (rotation * Vector3.forward).normalized;
         }
 
+        /// <summary>
+        /// Finds the arithmetic mean position of a finite set of points.
+        /// </summary>
+        /// <param name="points">The points to iterate over for position calculation.</param>
+        /// <param name="centroid">The output point.</param>
+        /// <returns>False if a centroid could not be found due to invalid input (such as zero points provided).</returns>
+        public static bool CalculateCentroid(IEnumerable<Vector2> points, out Vector2 centroid)
+        {
+            centroid = default(Vector2);
+            var count = points.Count();
+
+            if (count == 0)
+            {
+                return false;
+            }
+
+            foreach (var point in points)
+            {
+                centroid += point;
+            }
+
+            centroid /= count;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Finds the arithmetic mean position of a finite set of points.
+        /// </summary>
+        /// <param name="points">The points to iterate over for position calculation.</param>
+        /// <param name="centroid">The output point.</param>
+        /// <returns>False if a centroid could not be found due to invalid input (such as zero points provided).</returns>
+        public static bool CalculateCentroid(IEnumerable<Vector3> points, out Vector3 centroid)
+        {
+            centroid = default(Vector3);
+            var count = points.Count();
+
+            if (count == 0)
+            {
+                return false;
+            }
+
+            foreach (var point in points)
+            {
+                centroid += point;
+            }
+
+            centroid /= count;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Finds the arithmetic mean position of a finite set of points.
+        /// </summary>
+        /// <param name="points">The points to iterate over for position calculation.</param>
+        /// <param name="centroid">The output point.</param>
+        /// <returns>False if a centroid could not be found due to invalid input (such as zero points provided).</returns>
+        public static bool CalculateCentroid(IEnumerable<Vector4> points, out Vector4 centroid)
+        {
+            centroid = default(Vector4);
+            var count = points.Count();
+
+            if (count == 0)
+            {
+                return false;
+            }
+
+            foreach (var point in points)
+            {
+                centroid += point;
+            }
+
+            centroid /= count;
+
+            return true;
+        }
     }
 }

@@ -805,11 +805,12 @@ MonoBehaviour:
   maintainScale: 1
   smoothing: 1
   lifetime: 0
-  moveToDefaultDistanceLerpTime: 0.05
   orientationType: 3
   minDistance: 0.45
   maxDistance: 0.78
   defaultDistance: 0.58
+  angularClampMode: 1
+  boundMargin: 2.2
   maxViewHorizontalDegrees: 70
   maxViewVerticalDegrees: 70
   orientToControllerDeadzoneDegrees: 60
@@ -818,6 +819,7 @@ MonoBehaviour:
   ignoreReferencePitchAndRoll: 1
   pitchOffset: 0
   verticalMaxDistance: 0.1
+  debugDraw: 1
 --- !u!1001 &1090913102773355362
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -920,16 +922,6 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 6414827836461462228, guid: e1e3746d5067a614683084937319e0ba,
-        type: 3}
-      propertyPath: m_Mesh
-      value: 
-      objectReference: {fileID: 0}
-    - target: {fileID: 8674287670246001095, guid: e1e3746d5067a614683084937319e0ba,
-        type: 3}
-      propertyPath: m_Materials.Array.data[0]
-      value: 
-      objectReference: {fileID: 2100000, guid: 983d124b2920b4e4499bfc42d1bee8d2, type: 2}
     - target: {fileID: 508094984745842231, guid: e1e3746d5067a614683084937319e0ba,
         type: 3}
       propertyPath: m_textInfo.characterCount
@@ -960,6 +952,16 @@ PrefabInstance:
       propertyPath: m_Materials.Array.data[0]
       value: 
       objectReference: {fileID: 2100000, guid: 6f99b8c3ebc31c942a5af2e66bfa5950, type: 2}
+    - target: {fileID: 6414827836461462228, guid: e1e3746d5067a614683084937319e0ba,
+        type: 3}
+      propertyPath: m_Mesh
+      value: 
+      objectReference: {fileID: 0}
+    - target: {fileID: 8674287670246001095, guid: e1e3746d5067a614683084937319e0ba,
+        type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: 983d124b2920b4e4499bfc42d1bee8d2, type: 2}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: e1e3746d5067a614683084937319e0ba, type: 3}
 --- !u!4 &8593696031498887406 stripped

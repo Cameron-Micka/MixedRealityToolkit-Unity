@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using Microsoft.MixedReality.Toolkit.Utilities;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -63,6 +64,23 @@ namespace Microsoft.MixedReality.Toolkit
         private const int CAPSULE_X_AXIS = 0;
         private const int CAPSULE_Y_AXIS = 1;
         private const int CAPSULE_Z_AXIS = 2;
+
+        // Edges used to render the bounds.
+        private static readonly int[] boundsEdges = new int[]
+        {
+             LBF, LBB,
+             LBB, LTB,
+             LTB, LTF,
+             LTF, LBF,
+             LBF, RTB,
+             RTB, RTF,
+             RTF, RBF,
+             RBF, RBB,
+             RBB, RTB,
+             RTF, LBB,
+             RBF, LTB,
+             RBB, LTF
+        };
 
         public enum Axis
         {
@@ -337,6 +355,42 @@ namespace Microsoft.MixedReality.Toolkit
         }
 
         /// <summary>
+        /// Method to get bounds from a collection of points.
+        /// </summary>
+        /// <param name="points">The points to construct a bounds around.</param>
+        /// <param name="bounds">An AABB in world space around all the points.</param>
+        /// <returns>True if bounds were calculated, if zero points are present bounds will not be calculated</returns>
+        public static bool GetPointsBounds(List<Vector3> points, out Bounds bounds)
+        {
+            Vector3 centroid;
+            MathUtilities.CalculateCentroid(points, out centroid);
+
+            bounds = new Bounds(centroid, Vector3.zero);
+
+            foreach (var point in points)
+            {
+                bounds.Encapsulate(point);
+            }
+
+            return points.Count != 0;
+        }
+
+        /// <summary>
+        /// Method to get bounds using Collider method.
+        /// </summary>
+        /// <param name="target">GameObject to generate the bounds around.</param>
+        /// <param name="bounds">An AABB in world space around all the colliders in a gameObject hierarchy.</param>
+        /// <param name="ignoreLayers">A LayerMask to restrict the colliers selected.</param>
+        /// <returns>True if bounds were calculated, if zero colliders are present bounds will not be calculated.</returns>
+        public static bool GetColliderBounds(GameObject target, out Bounds bounds, LayerMask ignoreLayers)
+        {
+            var boundsPoints = new List<Vector3>();
+            GetColliderBoundsPoints(target, boundsPoints, ignoreLayers);
+
+            return GetPointsBounds(boundsPoints, out bounds);
+        }
+
+        /// <summary>
         /// Method to get bounding box points using Collider method.
         /// </summary>
         /// <param name="target">gameObject that boundingBox bounds.</param>
@@ -407,6 +461,21 @@ namespace Microsoft.MixedReality.Toolkit
         }
 
         /// <summary>
+        /// Method to get bounds using Renderer method.
+        /// </summary>
+        /// <param name="target">GameObject to generate the bounds around.</param>
+        /// <param name="bounds">An AABB in world space around all the renderers in a gameObject hierarchy.</param>
+        /// <param name="ignoreLayers">A LayerMask to restrict the colliers selected.</param>
+        /// <returns>True if bounds were calculated, if zero renderers are present bounds will not be calculated.</returns>
+        public static bool GetRenderBounds(GameObject target, out Bounds bounds, LayerMask ignoreLayers)
+        {
+            var boundsPoints = new List<Vector3>();
+            GetRenderBoundsPoints(target, boundsPoints, ignoreLayers);
+
+            return GetPointsBounds(boundsPoints, out bounds);
+        }
+
+        /// <summary>
         /// GetRenderBoundsPoints gets bounding box points using Render method.
         /// </summary>
         /// <param name="target">gameObject that boundingbox bounds</param>
@@ -426,6 +495,21 @@ namespace Microsoft.MixedReality.Toolkit
                 rendererObj.bounds.GetCornerPositionsFromRendererBounds(ref corners);
                 boundsPoints.AddRange(corners);
             }
+        }
+
+        /// <summary>
+        /// Method to get bounds using MeshFilters method.
+        /// </summary>
+        /// <param name="target">GameObject to generate the bounds around.</param>
+        /// <param name="bounds">An AABB in world space around all the meshFilters in a gameObject hierarchy.</param>
+        /// <param name="ignoreLayers">A LayerMask to restrict the colliers selected.</param>
+        /// <returns>True if bounds were calculated, if zero meshFilters are present bounds will not be calculated.</returns>
+        public static bool GetMeshFilterBounds(GameObject target, out Bounds bounds, LayerMask ignoreLayers)
+        {
+            var boundsPoints = new List<Vector3>();
+            GetMeshFilterBoundsPoints(target, boundsPoints, ignoreLayers);
+
+            return GetPointsBounds(boundsPoints, out bounds);
         }
 
         /// <summary>
@@ -599,6 +683,35 @@ namespace Microsoft.MixedReality.Toolkit
             }
 
             return (distToClosestPoint1.magnitude <= distToClosestPoint2.magnitude);
+        }
+
+        /// <summary>
+        /// Draws a wire frame <see href="https://docs.unity3d.com/ScriptReference/Bounds.html">Bounds</see> object using <see href="https://docs.unity3d.com/ScriptReference/Debug.DrawLine.html">Debug.DrawLine</see>.
+        /// </summary>
+        /// <param name="bounds">The <see href="https://docs.unity3d.com/ScriptReference/Bounds.html">Bounds</see> to draw.</param>
+        /// <param name="color">Color of the line.</param>
+        /// <param name="duration">How long the line should be visible for in seconds.</param>
+        /// <param name="depthTest">Should the line be obscured by objects closer to the camera?</param>
+        public static void DebugDraw(this Bounds bounds, Color color, float duration = 0.0f, bool depthTest = true)
+        {
+            var o = bounds.center;
+            var x = bounds.extents.x;
+            var y = bounds.extents.y;
+            var z = bounds.extents.z;
+            var a = new Vector3(-x,  y, -z);
+            var b = new Vector3( x, -y, -z);
+            var c = new Vector3( x,  y, -z);
+
+            var verticies = new Vector3[]
+            {
+                bounds.min, o + a, o + b, o + c,
+                bounds.max, o - a, o - b, o - c
+            };
+
+            for (var i = 0; i < boundsEdges.Length; i += 2)
+            {
+                Debug.DrawLine(verticies[boundsEdges[i]], verticies[boundsEdges[i + 1]], color, duration, depthTest);
+            }
         }
 
         #endregion
