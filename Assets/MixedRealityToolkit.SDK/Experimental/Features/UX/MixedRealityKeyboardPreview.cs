@@ -63,6 +63,21 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.UI
             }
         }
 
+        [SerializeField, Tooltip("The initial pitch when spawned.")]
+        private float initialPitchOffsetDegrees = -5.0f;
+
+        /// <summary>
+        /// The initial pitch when spawned.
+        /// </summary>
+        public float InitialPitchOffsetDegrees
+        {
+            get { return initialPitchOffsetDegrees; }
+            set
+            {
+                initialPitchOffsetDegrees = value;
+            }
+        }
+
         private string text = string.Empty;
 
         /// <summary>
@@ -120,7 +135,7 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.UI
 
                 if (solverHandler.UpdateSolvers)
                 {
-                    ApplyShellSolverParamaters();
+                    ApplyShellSolverParameters();
                 }
             }
         }
@@ -136,7 +151,7 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.UI
                 initialCaretLocation = previewCaret.position;
             }
 
-            ApplyShellSolverParamaters();
+            ApplyShellSolverParameters();
         }
 
         #endregion MonoBehaviour Implementation
@@ -173,29 +188,12 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.UI
             }
         }
 
-        private void ApplyShellSolverParamaters()
+        private void ApplyShellSolverParameters()
         {
             var solver = GetComponent<Follow>();
 
             if (solver != null)
             {
-                solver.OrientationType = Toolkit.Utilities.SolverOrientationType.Unmodified;
-
-                solver.MinDistance = 0.45f;
-                solver.MaxDistance = 0.78f;
-                solver.DefaultDistance = 0.58f;
-
-                //solver.MaxViewHorizontalDegrees = todo
-                //solver.MaxViewVerticalDegrees = todo
-                //m_leashHorizontalMarginPercentage = 2.2f
-                //m_leashVerticalMarginPercentage = 2.2f
-
-                //solver.OrientToControllerDeadzoneDegrees = todo;
-
-                solver.IgnoreAngleClamp = false;
-                solver.IgnoreDistanceClamp = false;
-                solver.IgnoreReferencePitchAndRoll = true;
-
                 // Position the keyboard in a comfortable place with a fixed pitch relative to the forward direction.
                 var solverHandler = solver.GetComponent<SolverHandler>();
 
@@ -215,12 +213,10 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.UI
                     }
 
                     // Initial carry pitch.
-                    pitchOffsetDegrees += -5.0f;
+                    pitchOffsetDegrees += initialPitchOffsetDegrees;
 
                     solver.PitchOffset = pitchOffsetDegrees;
                 }
-
-                solver.VerticalMaxDistance = 0.1f;
             }
         }
     }

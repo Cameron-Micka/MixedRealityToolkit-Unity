@@ -359,20 +359,23 @@ namespace Microsoft.MixedReality.Toolkit
         /// </summary>
         /// <param name="points">The points to construct a bounds around.</param>
         /// <param name="bounds">An AABB in world space around all the points.</param>
-        /// <returns>True if bounds were calculated, if zero points are present bounds will not be calculated</returns>
+        /// <returns>True if bounds were calculated, if zero points are present bounds will not be calculated.</returns>
         public static bool GetPointsBounds(List<Vector3> points, out Bounds bounds)
         {
-            Vector3 centroid;
-            MathUtilities.CalculateCentroid(points, out centroid);
-
-            bounds = new Bounds(centroid, Vector3.zero);
-
-            foreach (var point in points)
+            if (points.Count != 0)
             {
-                bounds.Encapsulate(point);
+                bounds = new Bounds(points[0], Vector3.zero);
+
+                for (var i = 1; i < points.Count; ++i)
+                {
+                    bounds.Encapsulate(points[i]);
+                }
+
+                return true;
             }
 
-            return points.Count != 0;
+            bounds = new Bounds();
+            return false;
         }
 
         /// <summary>

@@ -3,7 +3,6 @@
 
 using Microsoft.MixedReality.Toolkit.Utilities;
 using Microsoft.MixedReality.Toolkit.Utilities.Solvers;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
@@ -472,8 +471,10 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
                     case AngularClampType.RendererBounds:
                     case AngularClampType.ColliderBounds:
                         {
-                            min = refRotation * new Vector3(-extents.x, 0.0f, currentDistance);
-                            max = refRotation * new Vector3(extents.x, 0.0f, currentDistance);
+                            var extentsXZ = new Vector3(extents.x, 0.0f, extents.z);
+                            var extentsXZMagnitude = extentsXZ.magnitude;
+                            min = refRotation * new Vector3(-extentsXZMagnitude, 0.0f, currentDistance);
+                            max = refRotation * new Vector3(extentsXZMagnitude, 0.0f, currentDistance);
 
                             if (debugDraw)
                             {
