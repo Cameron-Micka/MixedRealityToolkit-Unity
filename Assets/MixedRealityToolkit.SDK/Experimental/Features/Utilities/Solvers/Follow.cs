@@ -90,19 +90,6 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
         }
 
         [SerializeField]
-        [Tooltip("TODO")]
-        private float boundMargin = 1.0f;
-
-        /// <summary>
-        /// TODO
-        /// </summary>
-        public float BoundMargin
-        {
-            get { return boundMargin; }
-            set { boundMargin = value; }
-        }
-
-        [SerializeField]
         [Tooltip("The element will stay at least this close to the center of view")]
         private float maxViewHorizontalDegrees = 30f;
 
@@ -126,6 +113,19 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
         {
             get { return maxViewVerticalDegrees; }
             set { maxViewVerticalDegrees = value; }
+        }
+
+        [SerializeField]
+        [Tooltip("TODO")]
+        private float boundMargin = 1.0f;
+
+        /// <summary>
+        /// TODO
+        /// </summary>
+        public float BoundMargin
+        {
+            get { return boundMargin; }
+            set { boundMargin = value; }
         }
 
         [SerializeField]
@@ -242,21 +242,19 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
         {
             Vector3 refPosition = Vector3.zero;
             Quaternion refRotation = Quaternion.identity;
-            Vector3 refForward = Vector3.zero; // TODO, do we need this?
             GetReferenceInfo(
                 PreviousReferencePosition,
                 ReferencePosition,
                 ReferenceRotation,
                 VerticalMaxDistance,
                 ref refPosition,
-                ref refRotation,
-                ref refForward);
+                ref refRotation);
 
             // Determine the current position of the element
             Vector3 currentPosition = WorkingPosition;
             if (recenterNextUpdate)
             {
-                currentPosition = refPosition + refForward * DefaultDistance;
+                currentPosition = refPosition + (refRotation * Vector3.forward) * DefaultDistance;
             }
 
             Bounds bounds;
@@ -509,10 +507,11 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
 
             refForward = rotation * Vector3.forward;
 
-            // TODO: Fix? for stuck behind head issue
-            if (Vector3.Dot(refForward, CameraCache.Main.transform.forward) < 0)
+            // When moving quickly the solver can fall behind the tracked object and face the wrong direction to avoid
+            // that case the forward is negated to keep the object billboarded correctly.
+            if (Vector3.Dot(refForward, previousRefRotation * Vector3.forward) < 0)
             {
-                refForward *= -1;
+                refForward *= -1.0f;
             }
 
             return angularClamped;
@@ -621,8 +620,7 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
             Quaternion currentRefRotation,
             float verticalMaxDistance,
             ref Vector3 refPosition,
-            ref Quaternion refRotation,
-            ref Vector3 refForward)
+            ref Quaternion refRotation)
         {
             refPosition = currentRefPosition;
             refRotation = currentRefRotation;
@@ -638,8 +636,6 @@ namespace Microsoft.MixedReality.Toolkit.Experimental.Utilities.Solvers
                     refRotation = Quaternion.LookRotation(forward);
                 }
             }
-
-            refForward = refRotation * Vector3.forward;
 
             // Apply vertical clamp on reference
             if (!recenterNextUpdate && verticalMaxDistance > 0)
