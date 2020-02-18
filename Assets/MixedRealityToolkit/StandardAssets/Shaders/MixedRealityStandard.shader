@@ -142,6 +142,7 @@ Shader "Mixed Reality Toolkit/Standard"
             #pragma multi_compile _ _CLIPPING_PLANE
             #pragma multi_compile _ _CLIPPING_SPHERE
             #pragma multi_compile _ _CLIPPING_BOX
+            #pragma multi_compile _ _CLIPPING_CONE
 
             #pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON
             #pragma shader_feature _DISABLE_ALBEDO_MAP
@@ -197,7 +198,7 @@ Shader "Mixed Reality Toolkit/Standard"
             #undef _NORMAL
 #endif
 
-#if defined(_CLIPPING_PLANE) || defined(_CLIPPING_SPHERE) || defined(_CLIPPING_BOX)
+#if defined(_CLIPPING_PLANE) || defined(_CLIPPING_SPHERE) || defined(_CLIPPING_BOX) || defined(_CLIPPING_CONE)
         #define _CLIPPING_PRIMITIVE
 #else
         #undef _CLIPPING_PRIMITIVE
@@ -390,6 +391,13 @@ Shader "Mixed Reality Toolkit/Standard"
             fixed _ClipBoxSide;
             float4 _ClipBoxSize;
             float4x4 _ClipBoxInverseTransform;
+#endif
+
+#if defined(_CLIPPING_CONE)
+            fixed _ClipConeSide;
+            float3 _ClipConeStart;
+            float3 _ClipConeEnd;
+            float2 _ClipConeRadii;
 #endif
 
 #if defined(_CLIPPING_PRIMITIVE)
@@ -815,6 +823,9 @@ Shader "Mixed Reality Toolkit/Standard"
 #endif
 #if defined(_CLIPPING_BOX)
                 primitiveDistance = min(primitiveDistance, PointVsBox(i.worldPosition.xyz, _ClipBoxSize.xyz, _ClipBoxInverseTransform) * _ClipBoxSide);
+#endif
+#if defined(_CLIPPING_CONE)
+                primitiveDistance = min(primitiveDistance, PointVsCone(i.worldPosition.xyz, _ClipConeStart, _ClipConeEnd, _ClipConeRadii) * _ClipConeSide);
 #endif
 #if defined(_CLIPPING_BORDER)
                 fixed3 primitiveBorderColor = lerp(_ClippingBorderColor, fixed3(0.0, 0.0, 0.0), primitiveDistance / _ClippingBorderWidth);
