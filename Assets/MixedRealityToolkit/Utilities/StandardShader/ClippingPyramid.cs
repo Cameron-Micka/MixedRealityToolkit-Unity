@@ -12,9 +12,8 @@ namespace Microsoft.MixedReality.Toolkit.Utilities
     [ExecuteInEditMode]
     public class ClippingPyramid : ClippingPrimitive
     {
-        private int clipPyramidStartID;
-        private int clipPyramidEndID;
-        private int clipPyramidEndRadiiID;
+        private int clipPyramidHeightID;
+        private int clipPyramidInverseTransformID;
 
         /// <inheritdoc />
         protected override string Keyword
@@ -32,18 +31,30 @@ namespace Microsoft.MixedReality.Toolkit.Utilities
         {
             if (enabled)
             {
-                Vector3 lossyScale = transform.lossyScale * 0.5f;
-                Vector3 start = transform.position + transform.forward * lossyScale.z;
-                Vector3 end = transform.position - transform.forward * lossyScale.z;
-                Gizmos.matrix = Matrix4x4.TRS(start, transform.rotation, new Vector3(lossyScale.x, lossyScale.x, 0.0f));
-                Gizmos.DrawWireSphere(Vector3.zero, 1.0f);
-                Gizmos.matrix = Matrix4x4.TRS(end, transform.rotation, new Vector3(lossyScale.y, lossyScale.y, 0.0f));
-                Gizmos.DrawWireSphere(Vector3.zero, 1.0f);
-                Gizmos.matrix = Matrix4x4.identity;
-                Gizmos.DrawLine(start + transform.right * lossyScale.x, end + transform.right * lossyScale.y);
-                Gizmos.DrawLine(start - transform.right * lossyScale.x, end - transform.right * lossyScale.y);
-                Gizmos.DrawLine(start + transform.up * lossyScale.x, end + transform.up * lossyScale.y);
-                Gizmos.DrawLine(start - transform.up * lossyScale.x, end - transform.up * lossyScale.y);
+                Vector3 lossyScale = transform.lossyScale;
+                Vector3 up = transform.up;
+                Vector3 halfRight = transform.right * 0.5f;
+                Vector3 halfForward = transform.forward * 0.5f;
+                Vector3 top = transform.position + up * lossyScale.y;
+                Vector3 bottom = transform.position;
+
+                Vector3[] bottoms = 
+                {
+                    bottom + halfForward + halfRight,
+                    bottom - halfForward + halfRight,
+                    bottom - halfForward - halfRight,
+                    bottom + halfForward - halfRight
+                };
+
+                foreach (var point in bottoms)
+                {
+                    Gizmos.DrawLine(top, point);
+                }
+
+                for (var i  = 0; i < bottoms.Length; ++i)
+                {
+                    Gizmos.DrawLine(bottoms[i], bottoms[(i + 1) % bottoms.Length]);
+                }
             }
         }
 
@@ -52,17 +63,16 @@ namespace Microsoft.MixedReality.Toolkit.Utilities
         {
             base.Initialize();
 
-            clipPyramidStartID = Shader.PropertyToID("_ClipPyramidStart");
-            clipPyramidEndID = Shader.PropertyToID("_ClipPyramidEnd");
-            clipPyramidEndRadiiID = Shader.PropertyToID("_ClipPyramidRadii");
+            clipPyramidHeightID = Shader.PropertyToID("_ClipPyramidHeight");
+            clipPyramidInverseTransformID = Shader.PropertyToID("_ClipPyramidInverseTransform");
         }
 
         protected override void UpdateShaderProperties(MaterialPropertyBlock materialPropertyBlock)
         {
-            Vector3 lossyScale = transform.lossyScale * 0.5f;
-            materialPropertyBlock.SetVector(clipPyramidStartID, transform.position + transform.forward * lossyScale.z);
-            materialPropertyBlock.SetVector(clipPyramidEndID, transform.position - transform.forward * lossyScale.z);
-            materialPropertyBlock.SetVector(clipPyramidEndRadiiID, new Vector2(lossyScale.x, lossyScale.y));
+            Vector3 lossyScale = transform.lossyScale;
+            materialPropertyBlock.SetFloat(clipPyramidHeightID, lossyScale.y);
+            Matrix4x4 pyramidInverseTransform = Matrix4x4.TRS(transform.position, transform.rotation, Vector3.one).inverse;
+            materialPropertyBlock.SetMatrix(clipPyramidInverseTransformID, pyramidInverseTransform);
         }
     }
 }

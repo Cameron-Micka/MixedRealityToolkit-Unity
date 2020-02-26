@@ -4,6 +4,8 @@
 #ifndef MRTK_SHADER_UTILS
 #define MRTK_SHADER_UTILS
 
+// SDF methods from: https://www.shadertoy.com/view/Xds3zN
+
 #if defined(_CLIPPING_PLANE)
 inline float PointVsPlane(float3 worldPosition, float4 plane)
 {
@@ -59,33 +61,31 @@ inline float PointVsCone(float3 worldPosition, float3 clipConeStart, float3 clip
 #endif
 
 #if defined(_CLIPPING_PYRAMID)
-inline float PointVsPyramid(float3 worldPosition, float3 clipPyramidStart, float3 clipPyramidEnd, float2 clipPyramidRadii)
+inline float PointVsPyramid(float3 worldPosition, float pyramidHeight, float4x4 pyramidInverseTransform)
 {
-    float3 p = worldPosition;
-    float3 a = clipPyramidStart;
-    float3 b = clipPyramidEnd;
-    float ra = clipPyramidRadii.x;
-    float rb = clipPyramidRadii.y;
+    float3 p = mul(pyramidInverseTransform, float4(worldPosition, 1.0));
+    float h = pyramidHeight;
 
-    float rba = rb - ra;
-    float baba = dot(b - a, b - a);
-    float papa = dot(p - a, p - a);
-    float paba = dot(p - a, b - a) / baba;
+    float m2 = h * h + 0.25;
 
-    float x = sqrt(papa - paba * paba * baba);
+    // Symmetry.
+    p.xz = abs(p.xz);
+    p.xz = (p.z > p.x) ? p.zx : p.xz;
+    p.xz -= 0.5;
 
-    float cax = max(0.0, x - ((paba < 0.5) ? ra : rb));
-    float cay = abs(paba - 0.5) - 0.5;
+    // Project into face plane (2D).
+    float3 q = float3(p.z, h * p.y - 0.5 * p.x, h * p.x + 0.5 * p.y);
 
-    float k = rba * rba + baba;
-    float f = clamp((rba * (x - ra) + paba * baba) / k, 0.0, 1.0);
+    float s = max(-q.x, 0.0);
+    float t = clamp((q.y - 0.5 * p.z) / (m2 + 0.25), 0.0, 1.0);
 
-    float cbx = x - ra - f * rba;
-    float cby = paba - f;
+    float a = m2 * (q.x + s) * (q.x + s) + q.y * q.y;
+    float b = m2 * (q.x + 0.5 * t) * (q.x + 0.5 * t) + (q.y - m2 * t) * (q.y - m2 * t);
 
-    float s = (cbx < 0.0 && cay < 0.0) ? -1.0 : 1.0;
+    float d2 = min(q.y, -q.x * m2 - q.y * 0.5) > 0.0 ? 0.0 : min(a, b);
 
-    return s * sqrt(min(cax * cax + cay * cay * baba, cbx * cbx + cby * cby * baba));
+    // Recover 3D and scale, and add sign.
+    return sqrt((d2 + q.z * q.z) / m2) * sign(max(q.z, -p.y));;
 }
 #endif
 
