@@ -1,4 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Upgrade NOTE: excluded shader from DX11 because it uses wrong array syntax (type[size] name)
+#pragma exclude_renderers d3d11
 // Licensed under the MIT License.
 
 #ifndef MRTK_SHADER_UTILS
@@ -6,7 +8,7 @@
 
 // SDF methods from: https://www.shadertoy.com/view/Xds3zN
 
-#if defined(_CLIPPING_PLANE)
+#if defined(_CLIPPING_PLANE) || defined(_CLIPPING_FRUSTUM)
 inline float PointVsPlane(float3 worldPosition, float4 plane)
 {
     float3 planePosition = plane.xyz * plane.w;
@@ -60,32 +62,15 @@ inline float PointVsCone(float3 worldPosition, float3 clipConeStart, float3 clip
 }
 #endif
 
-#if defined(_CLIPPING_PYRAMID)
-inline float PointVsPyramid(float3 worldPosition, float pyramidHeight, float4x4 pyramidInverseTransform)
+#if defined(_CLIPPING_FRUSTUM)
+inline float PointVsFrustum(float3 worldPosition, float4 frustumPlanes[6])
 {
-    float3 p = mul(pyramidInverseTransform, float4(worldPosition, 1.0));
-    float h = pyramidHeight;
-
-    float m2 = h * h + 0.25;
-
-    // Symmetry.
-    p.xz = abs(p.xz);
-    p.xz = (p.z > p.x) ? p.zx : p.xz;
-    p.xz -= 0.5;
-
-    // Project into face plane (2D).
-    float3 q = float3(p.z, h * p.y - 0.5 * p.x, h * p.x + 0.5 * p.y);
-
-    float s = max(-q.x, 0.0);
-    float t = clamp((q.y - 0.5 * p.z) / (m2 + 0.25), 0.0, 1.0);
-
-    float a = m2 * (q.x + s) * (q.x + s) + q.y * q.y;
-    float b = m2 * (q.x + 0.5 * t) * (q.x + 0.5 * t) + (q.y - m2 * t) * (q.y - m2 * t);
-
-    float d2 = min(q.y, -q.x * m2 - q.y * 0.5) > 0.0 ? 0.0 : min(a, b);
-
-    // Recover 3D and scale, and add sign.
-    return sqrt((d2 + q.z * q.z) / m2) * sign(max(q.z, -p.y));;
+    return max(max(max(max(max(PointVsPlane(worldPosition, frustumPlanes[0]), 
+                               PointVsPlane(worldPosition, frustumPlanes[1])), 
+                               PointVsPlane(worldPosition, frustumPlanes[2])), 
+                               PointVsPlane(worldPosition, frustumPlanes[3])), 
+                               PointVsPlane(worldPosition, frustumPlanes[4])), 
+                               PointVsPlane(worldPosition, frustumPlanes[5]));
 }
 #endif
 

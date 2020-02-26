@@ -143,7 +143,7 @@ Shader "Mixed Reality Toolkit/Standard"
             #pragma multi_compile _ _CLIPPING_SPHERE
             #pragma multi_compile _ _CLIPPING_BOX
             #pragma multi_compile _ _CLIPPING_CONE
-            #pragma multi_compile _ _CLIPPING_PYRAMID
+            #pragma multi_compile _ _CLIPPING_FRUSTUM
 
             #pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON
             #pragma shader_feature _DISABLE_ALBEDO_MAP
@@ -199,7 +199,7 @@ Shader "Mixed Reality Toolkit/Standard"
             #undef _NORMAL
 #endif
 
-#if defined(_CLIPPING_PLANE) || defined(_CLIPPING_SPHERE) || defined(_CLIPPING_BOX) || defined(_CLIPPING_CONE) || defined(_CLIPPING_PYRAMID)
+#if defined(_CLIPPING_PLANE) || defined(_CLIPPING_SPHERE) || defined(_CLIPPING_BOX) || defined(_CLIPPING_CONE) || defined(_CLIPPING_PYRAMID) || defined(_CLIPPING_FRUSTUM)
         #define _CLIPPING_PRIMITIVE
 #else
         #undef _CLIPPING_PRIMITIVE
@@ -407,6 +407,11 @@ Shader "Mixed Reality Toolkit/Standard"
             float4x4 _ClipPyramidInverseTransform;
 #endif
 
+#if defined(_CLIPPING_FRUSTUM)
+            fixed _ClipFrustumSide;
+            float4 _ClipFrustumPlanes[6];
+#endif
+            
 #if defined(_CLIPPING_PRIMITIVE)
             float _BlendedClippingWidth;
 #endif
@@ -834,8 +839,8 @@ Shader "Mixed Reality Toolkit/Standard"
 #if defined(_CLIPPING_CONE)
                 primitiveDistance = min(primitiveDistance, PointVsCone(i.worldPosition.xyz, _ClipConeStart, _ClipConeEnd, _ClipConeRadii) * _ClipConeSide);
 #endif
-#if defined(_CLIPPING_PYRAMID)
-                primitiveDistance = min(primitiveDistance, PointVsPyramid(i.worldPosition.xyz, _ClipPyramidHeight, _ClipPyramidInverseTransform) * _ClipPyramidSide);
+#if defined(_CLIPPING_FRUSTUM)
+                primitiveDistance = min(primitiveDistance, PointVsFrustum(i.worldPosition.xyz, _ClipFrustumPlanes) * _ClipFrustumSide);
 #endif
 #if defined(_CLIPPING_BORDER)
                 fixed3 primitiveBorderColor = lerp(_ClippingBorderColor, fixed3(0.0, 0.0, 0.0), primitiveDistance / _ClippingBorderWidth);
