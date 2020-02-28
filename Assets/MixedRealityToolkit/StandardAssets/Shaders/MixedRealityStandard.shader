@@ -199,7 +199,7 @@ Shader "Mixed Reality Toolkit/Standard"
             #undef _NORMAL
 #endif
 
-#if defined(_CLIPPING_PLANE) || defined(_CLIPPING_SPHERE) || defined(_CLIPPING_BOX) || defined(_CLIPPING_CONE) || defined(_CLIPPING_PYRAMID) || defined(_CLIPPING_FRUSTUM)
+#if defined(_CLIPPING_PLANE) || defined(_CLIPPING_SPHERE) || defined(_CLIPPING_BOX) || defined(_CLIPPING_CONE) || defined(_CLIPPING_FRUSTUM)
         #define _CLIPPING_PRIMITIVE
 #else
         #undef _CLIPPING_PRIMITIVE
@@ -399,12 +399,6 @@ Shader "Mixed Reality Toolkit/Standard"
             float3 _ClipConeStart;
             float3 _ClipConeEnd;
             float2 _ClipConeRadii;
-#endif
-
-#if defined(_CLIPPING_PYRAMID)
-            fixed _ClipPyramidSide;
-            float _ClipPyramidHeight;
-            float4x4 _ClipPyramidInverseTransform;
 #endif
 
 #if defined(_CLIPPING_FRUSTUM)

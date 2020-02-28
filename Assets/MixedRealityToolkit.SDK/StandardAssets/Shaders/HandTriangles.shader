@@ -80,7 +80,20 @@ SubShader {
     #pragma geometry geometry_main
     #pragma multi_compile _ USE_ALBEDO_TEXTURE
 
+    #pragma multi_compile __ _CLIPPING_PLANE
+    #pragma multi_compile __ _CLIPPING_SPHERE
+    #pragma multi_compile __ _CLIPPING_BOX
+    #pragma multi_compile __ _CLIPPING_CONE
+    #pragma multi_compile __ _CLIPPING_FRUSTUM
+
     #include "UnityCG.cginc"
+    #include "../../../MixedRealityToolkit/StandardAssets/Shaders/MixedRealityShaderUtils.cginc"
+
+  #if defined(_CLIPPING_PLANE) || defined(_CLIPPING_SPHERE) || defined(_CLIPPING_BOX) || defined(_CLIPPING_CONE) || defined(_CLIPPING_FRUSTUM)
+        #define _CLIPPING_PRIMITIVE
+#else
+        #undef _CLIPPING_PRIMITIVE
+#endif
 
     float _Edge_Width_;
     float _Filter_Width_;
@@ -138,6 +151,34 @@ SubShader {
         float4 extra3 : TEXCOORD2;
         UNITY_VERTEX_OUTPUT_STEREO
     };
+
+#if defined(_CLIPPING_PLANE)
+    fixed _ClipPlaneSide;
+    float4 _ClipPlane;
+#endif
+
+#if defined(_CLIPPING_SPHERE)
+    fixed _ClipSphereSide;
+    float4 _ClipSphere;
+#endif
+
+#if defined(_CLIPPING_BOX)
+    fixed _ClipBoxSide;
+    float4 _ClipBoxSize;
+    float4x4 _ClipBoxInverseTransform;
+#endif
+
+#if defined(_CLIPPING_CONE)
+    fixed _ClipConeSide;
+    float3 _ClipConeStart;
+    float3 _ClipConeEnd;
+    float2 _ClipConeRadii;
+#endif
+
+#if defined(_CLIPPING_FRUSTUM)
+    fixed _ClipFrustumSide;
+    float4 _ClipFrustumPlanes[6];
+#endif
 
     #define Double_Sided 0
     #define Alpha_Blend 2
@@ -799,6 +840,28 @@ SubShader {
 
         result = Out_Color;
         float clipVal = (Out_Color.a<Clip_Threshold) ? -1 : 1;
+
+        // Primitive clipping.
+#if defined(_CLIPPING_PRIMITIVE)
+        float primitiveDistance = 1.0;
+#if defined(_CLIPPING_PLANE)
+        primitiveDistance = min(primitiveDistance, PointVsPlane(fragInput.posWorld, _ClipPlane) * _ClipPlaneSide);
+#endif
+#if defined(_CLIPPING_SPHERE)
+        primitiveDistance = min(primitiveDistance, PointVsSphere(fragInput.posWorld, _ClipSphere) * _ClipSphereSide);
+#endif
+#if defined(_CLIPPING_BOX)
+        primitiveDistance = min(primitiveDistance, PointVsBox(fragInput.posWorld, _ClipBoxSize.xyz, _ClipBoxInverseTransform) * _ClipBoxSide);
+#endif
+#if defined(_CLIPPING_CONE)
+        primitiveDistance = min(primitiveDistance, PointVsCone(fragInput.posWorld.xyz, _ClipConeStart, _ClipConeEnd, _ClipConeRadii) * _ClipConeSide);
+#endif
+#if defined(_CLIPPING_FRUSTUM)
+        primitiveDistance = min(primitiveDistance, PointVsFrustum(fragInput.posWorld.xyz, _ClipFrustumPlanes) * _ClipFrustumSide);
+#endif
+        clipVal *= primitiveDistance;
+#endif
+
         clip(clipVal);
 
       return result;

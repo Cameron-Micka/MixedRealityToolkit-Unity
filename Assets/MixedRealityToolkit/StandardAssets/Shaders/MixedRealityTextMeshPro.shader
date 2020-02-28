@@ -100,12 +100,14 @@ SubShader {
         #pragma multi_compile __ _CLIPPING_PLANE
         #pragma multi_compile __ _CLIPPING_SPHERE
         #pragma multi_compile __ _CLIPPING_BOX
+        #pragma multi_compile __ _CLIPPING_CONE
+        #pragma multi_compile __ _CLIPPING_FRUSTUM
 
         #include "UnityCG.cginc"
         #include "UnityUI.cginc"
         #include "MixedRealityShaderUtils.cginc"
 
-#if defined(_CLIPPING_PLANE) || defined(_CLIPPING_SPHERE) || defined(_CLIPPING_BOX)
+#if defined(_CLIPPING_PLANE) || defined(_CLIPPING_SPHERE) || defined(_CLIPPING_BOX) || defined(_CLIPPING_CONE) || defined(_CLIPPING_FRUSTUM)
         #define _CLIPPING_PRIMITIVE
 #else
         #undef _CLIPPING_PRIMITIVE
@@ -206,6 +208,18 @@ SubShader {
         fixed _ClipBoxSide;
         float4 _ClipBoxSize;
         float4x4 _ClipBoxInverseTransform;
+#endif
+
+#if defined(_CLIPPING_CONE)
+        fixed _ClipConeSide;
+        float3 _ClipConeStart;
+        float3 _ClipConeEnd;
+        float2 _ClipConeRadii;
+#endif
+
+#if defined(_CLIPPING_FRUSTUM)
+        fixed _ClipFrustumSide;
+        float4 _ClipFrustumPlanes[6];
 #endif
 
         struct vertex_t {
@@ -358,6 +372,12 @@ SubShader {
 #endif
 #if defined(_CLIPPING_BOX)
             primitiveDistance = min(primitiveDistance, PointVsBox(input.worldPosition, _ClipBoxSize.xyz, _ClipBoxInverseTransform) * _ClipBoxSide);
+#endif
+#if defined(_CLIPPING_CONE)
+            primitiveDistance = min(primitiveDistance, PointVsCone(input.worldPosition.xyz, _ClipConeStart, _ClipConeEnd, _ClipConeRadii) * _ClipConeSide);
+#endif
+#if defined(_CLIPPING_FRUSTUM)
+            primitiveDistance = min(primitiveDistance, PointVsFrustum(input.worldPosition.xyz, _ClipFrustumPlanes) * _ClipFrustumSide);
 #endif
             c *= step(0.0, primitiveDistance);
 #endif
