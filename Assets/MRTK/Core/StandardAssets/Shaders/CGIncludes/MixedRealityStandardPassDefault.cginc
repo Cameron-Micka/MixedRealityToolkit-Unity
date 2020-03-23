@@ -83,38 +83,40 @@ FragmentInput VertexShaderFunction(VertexInput input)
     output.uv.xy = TRANSFORM_TEX(input.uv, _MainTex);
 #endif
 
-    // TODO next.
+    // If using any features which require scale, calculate the orthonormal scale.
 #if defined(_BORDER_LIGHT) || defined(_ROUND_CORNERS)
-    float4 scale2D = CalculateScale2D(output.scale, localNormal);
-    output.scale.xyz = scale2D.xyz;
-    float borderWidth = scale2D.w;
-
+    float4 orthonormalsScale = CalculateOrthonormalScale(output.scale, localNormal);
+    output.scale.xyz = orthonormalsScale.xyz;
 #if defined(_BORDER_LIGHT) 
-    float scaleRatio = min(output.scale.x, output.scale.y) / max(output.scale.x, output.scale.y);
-    output.uv.z = IF(output.scale.x > output.scale.y, 1.0 - (borderWidth * scaleRatio), 1.0 - borderWidth);
-    output.uv.w = IF(output.scale.x > output.scale.y, 1.0 - borderWidth, 1.0 - (borderWidth * scaleRatio));
+    output.uv.zw = CalculateBorderLightScale(output.scale.xy, orthonormalsScale.w);
 #endif
 #endif
 
+    // Transform the lightmap UVs.
 #if defined(LIGHTMAP_ON)
     output.lightMapUV.xy = input.uv1.xy * unity_LightmapST.xy + unity_LightmapST.zw;
 #endif
 
+    // Pass though the vertex color.
 #if defined(_VERTEX_COLORS)
     output.color = input.color;
 #endif
 
+    // Sample from Unity light probes.
 #if defined(_SPHERICAL_HARMONICS)
     output.ambient = ShadeSH9(float4(worldNormal, 1.0));
 #endif
 
+    // Calculate the iridescent color. i.e. a color which changes based on view angle.
 #if defined(_IRIDESCENCE)
-    float3 rightTangent = normalize(mul((float3x3)unity_ObjectToWorld, float3(1.0, 0.0, 0.0)));
-    float3 incidentWithCenter = normalize(mul(unity_ObjectToWorld, float4(0.0, 0.0, 0.0, 1.0)) - _WorldSpaceCameraPos);
-    float tangentDotIncident = dot(rightTangent, incidentWithCenter);
-    output.iridescentColor = Iridescence(tangentDotIncident, _IridescentSpectrumMap, _IridescenceThreshold, input.uv, _IridescenceAngle, _IridescenceIntensity);
+    output.iridescentColor = Iridescence(input.uv, 
+                                         _IridescentSpectrumMap,
+                                         _IridescenceThreshold, 
+                                         _IridescenceAngle, 
+                                         _IridescenceIntensity);
 #endif
 
+    // Pass though the various normal types and tangents.
 #if defined(_NORMAL)
 #if defined(_TRIPLANAR_MAPPING)
     output.worldNormal = worldNormal;
@@ -126,12 +128,7 @@ FragmentInput VertexShaderFunction(VertexInput input)
     output.triplanarPosition = output.worldPosition;
 #endif
 #elif defined(_NORMAL_MAP)
-    fixed3 worldTangent = UnityObjectToWorldDir(input.tangent.xyz);
-    fixed tangentSign = input.tangent.w * unity_WorldTransformParams.w;
-    fixed3 worldBitangent = cross(worldNormal, worldTangent) * tangentSign;
-    output.tangentX = fixed3(worldTangent.x, worldBitangent.x, worldNormal.x);
-    output.tangentY = fixed3(worldTangent.y, worldBitangent.y, worldNormal.y);
-    output.tangentZ = fixed3(worldTangent.z, worldBitangent.z, worldNormal.z);
+    CalculateTangentMatrix(worldNormal, input.tangent, output.tangentX, output.tangentY, output.tangentZ);
 #else
     output.worldNormal = worldNormal;
 #endif
@@ -139,6 +136,7 @@ FragmentInput VertexShaderFunction(VertexInput input)
 
     return output;
 }
+
 
 fixed4 FragmentShaderFunction(FragmentInput i, fixed facing : VFACE) : SV_Target
 {

@@ -4,6 +4,20 @@
 #ifndef MRTK_STANDARD_LIGHTING_INCLUDE
 #define MRTK_STANDARD_LIGHTING_INCLUDE
 
+inline void CalculateTangentMatrix(fixed3 worldNormal, 
+                                   fixed4 tangent, 
+                                   out fixed3 tangentX, 
+                                   out fixed3 tangentY, 
+                                   out fixed3 tangentZ)
+{
+    fixed3 worldTangent = UnityObjectToWorldDir(tangent.xyz);
+    fixed tangentSign = tangent.w * unity_WorldTransformParams.w;
+    fixed3 worldBitangent = cross(worldNormal, worldTangent) * tangentSign;
+    tangentX = fixed3(worldTangent.x, worldBitangent.x, worldNormal.x);
+    tangentY = fixed3(worldTangent.y, worldBitangent.y, worldNormal.y);
+    tangentZ = fixed3(worldTangent.z, worldBitangent.z, worldNormal.z);
+}
+
 #if defined(_HOVER_LIGHT)
 inline float HoverLight(float4 hoverLight, float inverseRadius, float3 worldPosition)
 {

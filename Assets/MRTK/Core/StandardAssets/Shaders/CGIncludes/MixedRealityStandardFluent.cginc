@@ -20,22 +20,29 @@ inline float CalculateNearFade(float3 worldPosition,
     return max(saturate(mad(fadeDistance, rangeInverse, -fadeCompleteDistance * rangeInverse)), fadeMinValue);
 }
 
-inline float4 CalculateScale2D(float3 scale, float3 localNormal)
+inline float4 CalculateOrthonormalScale(float3 scale, float3 localNormal)
 {
     float4 output;
+
+    // Calculate the axes with the smallest scale.
     output.z = min(min(scale.x, scale.y), scale.z);
 
-#if defined(_BORDER_LIGHT) 
+#if defined(_BORDER_LIGHT)
+    // Calculate the axes with the largest scale.
     float maxScale = max(max(scale.x, scale.y), scale.z);
-    float minOverMiddleScale = output.z / (scale.x + scale.y + scale.z - output.z - maxScale);
 
+    // Calculate the scale area along three planes.
     float areaYZ = scale.y * scale.z;
     float areaXZ = scale.z * scale.x;
     float areaXY = scale.x * scale.y;
 
+    // Calculate the ratio of the smallest scale over the middle scale (i.e. not the largest or smallest). 
+    float minOverMiddleScale = output.z / (scale.x + scale.y + scale.z - output.z - maxScale);
+
     output.w = _BorderWidth;
 #endif
 
+    // Determine which direction this "face" is pointed in and set the orthonormal scales.
     if (abs(localNormal.x) == 1.0) // Y,Z plane.
     {
         output.x = scale.z;
@@ -76,6 +83,20 @@ inline float4 CalculateScale2D(float3 scale, float3 localNormal)
     return output;
 }
 
+inline float2 CalculateBorderLightScale(float2 scale, float borderWidth)
+{
+    float scaleRatio = min(scale.x, scale.y) / max(scale.x, scale.y);
+
+    if (scale.x > scale.y)
+    {
+        return float2(1.0 - (borderWidth * scaleRatio), 1.0 - borderWidth);
+    }
+    else
+    {
+        return float2(1.0 - borderWidth, 1.0 - (borderWidth * scaleRatio));
+    }
+}
+
 inline float PointVsRoundedBox(float2 position, float2 cornerCircleDistance, float cornerCircleRadius)
 {
     return length(max(abs(position) - cornerCircleDistance, 0.0)) - cornerCircleRadius;
@@ -103,14 +124,16 @@ inline fixed RoundCorners(float2 position,
 #endif
 }
 
-fixed3 Iridescence(float tangentDotIncident, 
-                   sampler2D spectrumMap, 
+fixed3 Iridescence(float2 uv,
+                   sampler2D spectrumMap,
                    float threshold, 
-                   float2 uv,
                    float angle, 
                    float intensity)
 {
-    float k = tangentDotIncident * 0.5 + 0.5;
+    float3 rightTangent = normalize(mul((float3x3)unity_ObjectToWorld, float3(1.0, 0.0, 0.0)));
+    float3 incidentWithCenter = normalize(mul(unity_ObjectToWorld, float4(0.0, 0.0, 0.0, 1.0)) - _WorldSpaceCameraPos);
+
+    float k = dot(rightTangent, incidentWithCenter) * 0.5 + 0.5;
     float4 left = tex2D(spectrumMap, float2(lerp(0.0, 1.0 - threshold, k), 0.5), float2(0.0, 0.0), float2(0.0, 0.0));
     float4 right = tex2D(spectrumMap, float2(lerp(threshold, 1.0, k), 0.5), float2(0.0, 0.0), float2(0.0, 0.0));
 
