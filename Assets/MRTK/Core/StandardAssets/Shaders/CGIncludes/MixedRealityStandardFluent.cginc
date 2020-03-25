@@ -97,6 +97,40 @@ inline float2 CalculateBorderLightScale(float2 scale, float borderWidth)
     }
 }
 
+/// <summary>
+/// Returns the distance the current texel is from the center of the UV coordinates. i.e 0.0 at uv(0.5, 0.5) and 1.0 at 
+/// uv(0.0, 0.0) or uv(1.0, 1.0).
+/// </summary>
+inline float2 CalculateDistanceToUVEdge(float2 uv)
+{
+    return fixed2(abs(uv.x - 0.5) * 2.0, abs(uv.y - 0.5) * 2.0);
+}
+
+/// <summary>
+/// Returns the round corner radius based on the current corner if independent corners are enabled.
+/// </summary>
+inline float GetRoundCornerRadius(float2 uv)
+{
+#if defined(_ROUND_CORNERS)
+#if defined(_INDEPENDENT_CORNERS)
+    float4 radius = clamp(_RoundCornersRadius, 0, 0.5);
+
+    if (uv.x < 0.5)
+    {
+        return (uv.y > 0.5) ? radius.x : radius.w;
+    }
+    else
+    {
+        return (uv.y > 0.5) ? radius.y : radius.z;
+    }
+#else 
+     return _RoundCornerRadius;
+#endif
+#endif
+
+     return 0.0;
+}
+
 inline float PointVsRoundedBox(float2 position, float2 cornerCircleDistance, float cornerCircleRadius)
 {
     return length(max(abs(position) - cornerCircleDistance, 0.0)) - cornerCircleRadius;

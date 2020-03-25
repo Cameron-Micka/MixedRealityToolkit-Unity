@@ -103,7 +103,7 @@ float _NormalMapScale;
 #endif
 
 #if defined(_EMISSION)
-fixed4 _EmissiveColor;
+fixed3 _EmissiveColor;
 #endif
 
 #if defined(_TRIPLANAR_MAPPING)
@@ -132,31 +132,6 @@ fixed _RimPower;
 
 #if defined(_VERTEX_EXTRUSION)
 float _VertexExtrusionValue;
-#endif
-
-#if defined(_CLIPPING_PLANE)
-fixed _ClipPlaneSide;
-float4 _ClipPlane;
-#endif
-
-#if defined(_CLIPPING_SPHERE)
-fixed _ClipSphereSide;
-float4 _ClipSphere;
-#endif
-
-#if defined(_CLIPPING_BOX)
-fixed _ClipBoxSide;
-float4 _ClipBoxSize;
-float4x4 _ClipBoxInverseTransform;
-#endif
-
-#if defined(_CLIPPING_PRIMITIVE)
-float _BlendedClippingWidth;
-#endif
-
-#if defined(_CLIPPING_BORDER)
-fixed _ClippingBorderWidth;
-fixed3 _ClippingBorderColor;
 #endif
 
 #if defined(_NEAR_PLANE_FADE)

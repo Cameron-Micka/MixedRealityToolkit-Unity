@@ -40,7 +40,7 @@ Shader "Mixed Reality Toolkit/StandardNew"
         [Toggle(_VERTEX_EXTRUSION_SMOOTH_NORMALS)] _VertexExtrusionSmoothNormals("Vertex Extrusion Smooth Normals", Float) = 0.0
         _BlendedClippingWidth("Blended Clipping With", Range(0.0, 10.0)) = 1.0
         [Toggle(_CLIPPING_BORDER)] _ClippingBorder("Clipping Border", Float) = 0.0
-        _ClippingBorderWidth("Clipping Border Width", Range(0.0, 1.0)) = 0.025
+        _ClippingBorderWidth("Clipping Border Width", Range(0.001, 1.0)) = 0.025
         _ClippingBorderColor("Clipping Border Color", Color) = (1.0, 0.2, 0.0, 1.0)
         [Toggle(_NEAR_PLANE_FADE)] _NearPlaneFade("Near Plane Fade", Float) = 0.0
         [Toggle(_NEAR_LIGHT_FADE)] _NearLightFade("Near Light Fade", Float) = 0.0

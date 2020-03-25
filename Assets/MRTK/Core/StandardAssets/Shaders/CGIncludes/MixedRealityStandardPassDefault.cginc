@@ -128,7 +128,7 @@ FragmentInput VertexShaderFunction(VertexInput input)
     output.triplanarPosition = output.worldPosition;
 #endif
 #elif defined(_NORMAL_MAP)
-    CalculateTangentMatrix(worldNormal, input.tangent, output.tangentX, output.tangentY, output.tangentZ);
+    CalculateTangentBasis(worldNormal, input.tangent, output.tangentX, output.tangentY, output.tangentZ);
 #else
     output.worldNormal = worldNormal;
 #endif
@@ -138,179 +138,134 @@ FragmentInput VertexShaderFunction(VertexInput input)
 }
 
 
-fixed4 FragmentShaderFunction(FragmentInput i, fixed facing : VFACE) : SV_Target
+fixed4 FragmentShaderFunction(FragmentInput input, fixed triangleFacing : VFACE) : SV_Target
 {
+    // Initialize the input for any uses of UNITY_ACCESS_INSTANCED_PROP.
 #if defined(_INSTANCED_COLOR)
-                UNITY_SETUP_INSTANCE_ID(i);
+    UNITY_SETUP_INSTANCE_ID(input);
 #endif
 
+    // Calculate triplanar mapping UVs and blending parameters.
 #if defined(_TRIPLANAR_MAPPING)
-// Calculate triplanar uvs and apply texture scale and offset values like TRANSFORM_TEX.
-fixed3 triplanarBlend = pow(abs(i.triplanarNormal), _TriplanarMappingBlendSharpness);
-triplanarBlend /= dot(triplanarBlend, fixed3(1.0, 1.0, 1.0));
-float2 uvX = i.triplanarPosition.zy * _MainTex_ST.xy + _MainTex_ST.zw;
-float2 uvY = i.triplanarPosition.xz * _MainTex_ST.xy + _MainTex_ST.zw;
-float2 uvZ = i.triplanarPosition.xy * _MainTex_ST.xy + _MainTex_ST.zw;
-
-// Ternary operator is 2 instructions faster than sign() when we don't care about zero returning a zero sign.
-float3 axisSign = i.triplanarNormal < 0 ? -1 : 1;
-uvX.x *= axisSign.x;
-uvY.x *= axisSign.y;
-uvZ.x *= -axisSign.z;
+    float2 uvX, uvY, uvZ;
+    float3 triplanarBlend, triplanarAxisSign;
+    CalculateTriplanarUVs(input.triplanarNormal, 
+                          input.triplanarPosition, 
+                          _TriplanarMappingBlendSharpness, 
+                          _MainTex_ST, 
+                          triplanarBlend, 
+                          triplanarAxisSign, 
+                          uvX, uvY, uvZ);
 #endif
 
-// Texturing.
+    // Determine the initial albedo color.
 #if defined(_DISABLE_ALBEDO_MAP)
-                fixed4 albedo = fixed4(1.0, 1.0, 1.0, 1.0);
+    fixed4 albedo = fixed4(1.0, 1.0, 1.0, 1.0);
 #else
 #if defined(_TRIPLANAR_MAPPING)
-                fixed4 albedo = tex2D(_MainTex, uvX) * triplanarBlend.x +
-                                tex2D(_MainTex, uvY) * triplanarBlend.y +
-                                tex2D(_MainTex, uvZ) * triplanarBlend.z;
+    fixed4 albedo = tex2D(_MainTex, uvX) * triplanarBlend.x +
+                    tex2D(_MainTex, uvY) * triplanarBlend.y +
+                    tex2D(_MainTex, uvZ) * triplanarBlend.z;
 #else
-                fixed4 albedo = tex2D(_MainTex, i.uv);
+    fixed4 albedo = tex2D(_MainTex, input.uv);
 #endif
 #endif
 
+    // Darken the albedo based on the lightmap.
 #ifdef LIGHTMAP_ON
-                albedo.rgb *= DecodeLightmap(UNITY_SAMPLE_TEX2D(unity_Lightmap, i.lightMapUV));
+    albedo.rgb *= DecodeLightmap(UNITY_SAMPLE_TEX2D(unity_Lightmap, input.lightMapUV));
 #endif
 
+    // Unpack material properties from the channel texture, or main texture.
 #if defined(_CHANNEL_MAP)
-                fixed4 channel = tex2D(_ChannelMap, i.uv);
-                _Metallic = channel.r;
-                albedo.rgb *= channel.g;
-                _Smoothness = channel.a;
+#if defined(_EMISSION)
+    DecodeChannelMap(tex2D(_ChannelMap, input.uv), albedo.rgb, _EmissiveColor, _Metallic, _Smoothness);
 #else
-#if defined(_METALLIC_TEXTURE_ALBEDO_CHANNEL_A)
-                _Metallic = albedo.a;
-                albedo.a = 1.0;
+    fixed3 emission = fixed3(0.0, 0.0, 0.0);
+    DecodeChannelMap(tex2D(_ChannelMap, input.uv), albedo.rgb, emission, _Metallic, _Smoothness);
+#endif
+#elif defined(_METALLIC_TEXTURE_ALBEDO_CHANNEL_A)
+    _Metallic = albedo.a;
+    albedo.a = 1.0;
 #elif defined(_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A)
-                _Smoothness = albedo.a;
-                albedo.a = 1.0;
-#endif 
+    _Smoothness = albedo.a;
+    albedo.a = 1.0;
 #endif
 
-                // Primitive clipping.
-#if defined(_CLIPPING_PRIMITIVE)
-                float primitiveDistance = 1.0;
-#if defined(_CLIPPING_PLANE)
-                primitiveDistance = min(primitiveDistance, PointVsPlane(i.worldPosition.xyz, _ClipPlane) * _ClipPlaneSide);
-#endif
-#if defined(_CLIPPING_SPHERE)
-                primitiveDistance = min(primitiveDistance, PointVsSphere(i.worldPosition.xyz, _ClipSphere) * _ClipSphereSide);
-#endif
-#if defined(_CLIPPING_BOX)
-                primitiveDistance = min(primitiveDistance, PointVsBox(i.worldPosition.xyz, _ClipBoxSize.xyz, _ClipBoxInverseTransform) * _ClipBoxSide);
-#endif
-#if defined(_CLIPPING_BORDER)
-                fixed3 primitiveBorderColor = lerp(_ClippingBorderColor, fixed3(0.0, 0.0, 0.0), primitiveDistance / _ClippingBorderWidth);
-                albedo.rgb += primitiveBorderColor * IF((primitiveDistance < _ClippingBorderWidth), 1.0, 0.0);
-#endif
-#endif
-
-#if defined(_DISTANCE_TO_EDGE)
-                fixed2 distanceToEdge;
-                distanceToEdge.x = abs(i.uv.x - 0.5) * 2.0;
-                distanceToEdge.y = abs(i.uv.y - 0.5) * 2.0;
-#endif
-
-                // Rounded corner clipping.
-#if defined(_ROUND_CORNERS)
-                float2 halfScale = i.scale.xy * 0.5;
-                float2 roundCornerPosition = distanceToEdge * halfScale;
-
-                fixed currentCornerRadius;
-
-#if defined(_INDEPENDENT_CORNERS)
-
-                _RoundCornersRadius = clamp(_RoundCornersRadius, 0, 0.5);
-
-                if (i.uv.x < 0.5)
-                {
-                    if (i.uv.y > 0.5)
-                    {
-                        currentCornerRadius = _RoundCornersRadius.x;
-                    }
-                    else
-                    {
-                        currentCornerRadius = _RoundCornersRadius.w;
-                    }
-                }
-                else
-                {
-                    if (i.uv.y > 0.5)
-                    {
-                        currentCornerRadius = _RoundCornersRadius.y;
-                    }
-                    else
-                    {
-                        currentCornerRadius = _RoundCornersRadius.z;
-                    }
-                }
-#else 
-                currentCornerRadius = _RoundCornerRadius;
-#endif
-
-                float cornerCircleRadius = saturate(max(currentCornerRadius - _RoundCornerMargin, 0.01)) * i.scale.z;
-
-                float2 cornerCircleDistance = halfScale - (_RoundCornerMargin * i.scale.z) - cornerCircleRadius;
-
-                float roundCornerClip = RoundCorners(roundCornerPosition, cornerCircleDistance, cornerCircleRadius, _EdgeSmoothingValue);
-#endif
-
+    // Apply color properties.
 #if defined(_INSTANCED_COLOR)
-                albedo *= UNITY_ACCESS_INSTANCED_PROP(Props, _Color);
+    albedo *= UNITY_ACCESS_INSTANCED_PROP(Props, _Color);
 #else
-                albedo *= _Color;
+    albedo *= _Color;
 #endif
-
 #if defined(_VERTEX_COLORS)
-                albedo *= i.color;
+    albedo *= input.color;
 #endif
-
 #if defined(_IRIDESCENCE)
-                albedo.rgb += i.iridescentColor;
+    albedo.rgb += input.iridescentColor;
 #endif
 
-                // Normal calculation.
-#if defined(_NORMAL)
-                fixed3 worldViewDir = normalize(UnityWorldSpaceViewDir(i.worldPosition.xyz));
-#if defined(_REFLECTIONS) || defined(_ENVIRONMENT_COLORING)
-                fixed3 incident = -worldViewDir;
+    // Primitive clipping.
+#if defined(_CLIPPING_PRIMITIVE)
+    float primitiveDistance = CalculateMinClippingPrimitiveDistance(input.worldPosition.xyz);
+#if defined(_CLIPPING_BORDER)
+    albedo.rgb += CalculateClippingPrimitiveBorderColor(primitiveDistance);
 #endif
-                fixed3 worldNormal;
+#endif
+
+    // Common Fluent feature properties.
+#if defined(_DISTANCE_TO_EDGE)
+    float2 distanceToUVEdge = CalculateDistanceToUVEdge(input.uv);
+#endif
+
+    // Rounded corner clipping.
+#if defined(_ROUND_CORNERS)
+    float currentCornerRadius = GetRoundCornerRadius(input.uv);
+    float cornerCircleRadius = saturate(max(currentCornerRadius - _RoundCornerMargin, 0.01)) * input.scale.z;
+
+    float2 halfScale = input.scale.xy * 0.5;
+    float2 cornerCircleDistance = halfScale - (_RoundCornerMargin * input.scale.z) - cornerCircleRadius;
+
+    float2 cornerPosition = distanceToUVEdge * halfScale;
+    float roundCornerClip = RoundCorners(cornerPosition, cornerCircleDistance, cornerCircleRadius, _EdgeSmoothingValue);
+#endif
+
+#if defined(_NORMAL)
+    // World normal calculation.
+    fixed3 worldNormal;
 
 #if defined(_NORMAL_MAP)
 #if defined(_TRIPLANAR_MAPPING)
-                fixed3 tangentNormalX = UnpackScaleNormal(tex2D(_NormalMap, uvX), _NormalMapScale);
-                fixed3 tangentNormalY = UnpackScaleNormal(tex2D(_NormalMap, uvY), _NormalMapScale);
-                fixed3 tangentNormalZ = UnpackScaleNormal(tex2D(_NormalMap, uvZ), _NormalMapScale);
-                tangentNormalX.x *= axisSign.x;
-                tangentNormalY.x *= axisSign.y;
-                tangentNormalZ.x *= -axisSign.z;
-
-                // Swizzle world normals to match tangent space and apply Whiteout normal blend.
-                tangentNormalX = fixed3(tangentNormalX.xy + i.worldNormal.zy, tangentNormalX.z * i.worldNormal.x);
-                tangentNormalY = fixed3(tangentNormalY.xy + i.worldNormal.xz, tangentNormalY.z * i.worldNormal.y);
-                tangentNormalZ = fixed3(tangentNormalZ.xy + i.worldNormal.xy, tangentNormalZ.z * i.worldNormal.z);
-
-                // Swizzle tangent normals to match world normal and blend together.
-                worldNormal = normalize(tangentNormalX.zyx * triplanarBlend.x +
-                                        tangentNormalY.xzy * triplanarBlend.y +
-                                        tangentNormalZ.xyz * triplanarBlend.z);
+    fixed3 tangentNormalX = UnpackScaleNormal(tex2D(_NormalMap, uvX), _NormalMapScale);
+    fixed3 tangentNormalY = UnpackScaleNormal(tex2D(_NormalMap, uvY), _NormalMapScale);
+    fixed3 tangentNormalZ = UnpackScaleNormal(tex2D(_NormalMap, uvZ), _NormalMapScale);
+    worldNormal = TangentNormalToWorldNormalTriplanar(input.worldNormal,
+                                                      tangentNormalX, 
+                                                      tangentNormalY, 
+                                                      tangentNormalZ, 
+                                                      triplanarBlend, 
+                                                      triplanarAxisSign, 
+                                                      triangleFacing);
 #else
-                fixed3 tangentNormal = UnpackScaleNormal(tex2D(_NormalMap, i.uv), _NormalMapScale);
-                worldNormal.x = dot(i.tangentX, tangentNormal);
-                worldNormal.y = dot(i.tangentY, tangentNormal);
-                worldNormal.z = dot(i.tangentZ, tangentNormal);
-                worldNormal = normalize(worldNormal) * facing;
+    fixed3 tangentNormal = UnpackScaleNormal(tex2D(_NormalMap, input.uv), _NormalMapScale);
+    worldNormal = TangentNormalToWorldNormal(tangentNormal,
+                                             input.tangentX, 
+                                             input.tangentY, 
+                                             input.tangentZ, 
+                                             triangleFacing);
 #endif
 #else
-                worldNormal = normalize(i.worldNormal) * facing;
+    worldNormal = normalize(input.worldNormal) * triangleFacing;
+#endif
+
+    // World view vector calculation.
+    fixed3 worldViewVector = normalize(UnityWorldSpaceViewDir(input.worldPosition.xyz));
+#if defined(_REFLECTIONS) || defined(_ENVIRONMENT_COLORING)
+    fixed3 incidentVector = -worldViewVector;
 #endif
 #endif
 
+                // TODO
                 fixed pointToLight = 1.0;
                 fixed3 fluentLightColor = fixed3(0.0, 0.0, 0.0);
 
@@ -322,7 +277,7 @@ uvZ.x *= -axisSign.z;
                 for (int hoverLightIndex = 0; hoverLightIndex < HOVER_LIGHT_COUNT; ++hoverLightIndex)
                 {
                     int dataIndex = hoverLightIndex * HOVER_LIGHT_DATA_SIZE;
-                    fixed hoverValue = HoverLight(_HoverLightData[dataIndex], _HoverLightData[dataIndex + 1].w, i.worldPosition.xyz);
+                    fixed hoverValue = HoverLight(_HoverLightData[dataIndex], _HoverLightData[dataIndex + 1].w, input.worldPosition.xyz);
                     pointToLight += hoverValue;
 #if !defined(_HOVER_COLOR_OVERRIDE)
                     fluentLightColor += lerp(fixed3(0.0, 0.0, 0.0), _HoverLightData[dataIndex + 1].rgb, hoverValue);
@@ -343,7 +298,7 @@ uvZ.x *= -axisSign.z;
                 {
                     int dataIndex = proximityLightIndex * PROXIMITY_LIGHT_DATA_SIZE;
                     fixed colorValue;
-                    fixed proximityValue = ProximityLight(_ProximityLightData[dataIndex], _ProximityLightData[dataIndex + 1], _ProximityLightData[dataIndex + 2], i.worldPosition.xyz, worldNormal, colorValue);
+                    fixed proximityValue = ProximityLight(_ProximityLightData[dataIndex], _ProximityLightData[dataIndex + 1], _ProximityLightData[dataIndex + 2], input.worldPosition.xyz, worldNormal, colorValue);
                     pointToLight += proximityValue;
 #if defined(_PROXIMITY_LIGHT_COLOR_OVERRIDE)
                     fixed3 proximityColor = MixProximityLightColor(_ProximityLightCenterColorOverride, _ProximityLightMiddleColorOverride, _ProximityLightOuterColorOverride, colorValue);
@@ -364,14 +319,14 @@ uvZ.x *= -axisSign.z;
 #if defined(_ROUND_CORNERS)
                 fixed borderMargin = _RoundCornerMargin + _BorderWidth * 0.5;
 
-                cornerCircleRadius = saturate(max(currentCornerRadius - borderMargin, 0.01)) * i.scale.z;
+                cornerCircleRadius = saturate(max(currentCornerRadius - borderMargin, 0.01)) * input.scale.z;
 
-                cornerCircleDistance = halfScale - (borderMargin * i.scale.z) - cornerCircleRadius;
+                cornerCircleDistance = halfScale - (borderMargin * input.scale.z) - cornerCircleRadius;
 
-                borderValue = 1.0 - RoundCornersSmooth(roundCornerPosition, cornerCircleDistance, cornerCircleRadius, _EdgeSmoothingValue);
+                borderValue = 1.0 - RoundCornersSmooth(cornerPosition, cornerCircleDistance, cornerCircleRadius, _EdgeSmoothingValue);
 #else
-                borderValue = max(smoothstep(i.uv.z - _EdgeSmoothingValue, i.uv.z + _EdgeSmoothingValue, distanceToEdge.x),
-                                  smoothstep(i.uv.w - _EdgeSmoothingValue, i.uv.w + _EdgeSmoothingValue, distanceToEdge.y));
+                borderValue = max(smoothstep(input.uv.z - _EdgeSmoothingValue, input.uv.z + _EdgeSmoothingValue, distanceToUVEdge.x),
+                                  smoothstep(input.uv.w - _EdgeSmoothingValue, input.uv.w + _EdgeSmoothingValue, distanceToUVEdge.y));
 #endif
 #if defined(_HOVER_LIGHT) && defined(_BORDER_LIGHT_USES_HOVER_COLOR) && defined(_HOVER_COLOR_OVERRIDE)
                 fixed3 borderColor = _HoverColorOverride.rgb;
@@ -417,7 +372,7 @@ uvZ.x *= -axisSign.z;
 #endif
                 fixed diffuse = max(0.0, dot(worldNormal, directionalLightDirection));
 #if defined(_SPECULAR_HIGHLIGHTS)
-                fixed halfVector = max(0.0, dot(worldNormal, normalize(directionalLightDirection + worldViewDir)));
+                fixed halfVector = max(0.0, dot(worldNormal, normalize(directionalLightDirection + worldViewVector)));
                 fixed specular = saturate(pow(halfVector, _Shininess * pow(_Smoothness, 4.0)) * (_Smoothness * 2.0) * _Metallic);
 #else
                 fixed specular = 0.0;
@@ -426,11 +381,11 @@ uvZ.x *= -axisSign.z;
 
                 // Image based lighting (attempt to mimic the Standard shader).
 #if defined(_REFLECTIONS)
-                fixed3 worldReflection = reflect(incident, worldNormal);
+                fixed3 worldReflection = reflect(incidentVector, worldNormal);
                 fixed4 iblData = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, worldReflection, (1.0 - _Smoothness) * UNITY_SPECCUBE_LOD_STEPS);
                 fixed3 ibl = DecodeHDR(iblData, unity_SpecCube0_HDR);
 #if defined(_REFRACTION)
-                fixed4 refractColor = UNITY_SAMPLE_TEXCUBE(unity_SpecCube0, refract(incident, worldNormal, _RefractiveIndex));
+                fixed4 refractColor = UNITY_SAMPLE_TEXCUBE(unity_SpecCube0, refract(incidentVector, worldNormal, _RefractiveIndex));
                 ibl *= DecodeHDR(refractColor, unity_SpecCube0_HDR);
 #endif
 #else
@@ -439,7 +394,7 @@ uvZ.x *= -axisSign.z;
 
                 // Fresnel lighting.
 #if defined(_FRESNEL)
-                fixed fresnel = 1.0 - saturate(abs(dot(worldViewDir, worldNormal)));
+                fixed fresnel = 1.0 - saturate(abs(dot(worldViewVector, worldNormal)));
 #if defined(_RIM_LIGHT)
                 fixed3 fresnelColor = _RimColor * pow(fresnel, _RimPower);
 #else
@@ -449,7 +404,7 @@ uvZ.x *= -axisSign.z;
                 // Final lighting mix.
                 fixed4 output = albedo;
 #if defined(_SPHERICAL_HARMONICS)
-                fixed3 ambient = i.ambient;
+                fixed3 ambient = input.ambient;
 #else
                 fixed3 ambient = glstate_lightmodel_ambient + fixed3(0.25, 0.25, 0.25);
 #endif
@@ -481,30 +436,26 @@ uvZ.x *= -axisSign.z;
 #endif
 
 #if defined(_EMISSION)
-#if defined(_CHANNEL_MAP)
-                output.rgb += _EmissiveColor * channel.b;
-#else
-                output.rgb += _EmissiveColor;
-#endif
+    output.rgb += _EmissiveColor;
 #endif
 
                 // Inner glow.
 #if defined(_INNER_GLOW)
-                fixed2 uvGlow = pow(distanceToEdge * _InnerGlowColor.a, _InnerGlowPower);
+                fixed2 uvGlow = pow(distanceToUVEdge * _InnerGlowColor.a, _InnerGlowPower);
                 output.rgb += lerp(fixed3(0.0, 0.0, 0.0), _InnerGlowColor.rgb, uvGlow.x + uvGlow.y);
 #endif
 
                 // Environment coloring.
 #if defined(_ENVIRONMENT_COLORING)
-                fixed3 environmentColor = incident.x * incident.x * _EnvironmentColorX +
-                                          incident.y * incident.y * _EnvironmentColorY +
-                                          incident.z * incident.z * _EnvironmentColorZ;
-                output.rgb += environmentColor * max(0.0, dot(incident, worldNormal) + _EnvironmentColorThreshold) * _EnvironmentColorIntensity;
+                fixed3 environmentColor = incidentVector.x * incidentVector.x * _EnvironmentColorX +
+                                          incidentVector.y * incidentVector.y * _EnvironmentColorY +
+                                          incidentVector.z * incidentVector.z * _EnvironmentColorZ;
+                output.rgb += environmentColor * max(0.0, dot(incidentVector, worldNormal) + _EnvironmentColorThreshold) * _EnvironmentColorIntensity;
 
 #endif
 
 #if defined(_NEAR_PLANE_FADE)
-                output *= i.worldPosition.w;
+                output *= input.worldPosition.w;
 #endif
 
                 // Hover and proximity lighting should occur after near plane fading.

@@ -59,6 +59,23 @@ inline float DistanceToNearestLight(float3 worldPosition)
 }
 
 /// <summary>
+/// Calculates the tangent matrix basis vectors for use with normal mapping.
+/// </summary>
+inline void CalculateTangentBasis(fixed3 worldNormal,
+                                  fixed4 tangent,
+                                  out fixed3 tangentX,
+                                  out fixed3 tangentY,
+                                  out fixed3 tangentZ)
+{
+    fixed3 worldTangent = UnityObjectToWorldDir(tangent.xyz);
+    fixed tangentSign = tangent.w * unity_WorldTransformParams.w;
+    fixed3 worldBitangent = cross(worldNormal, worldTangent) * tangentSign;
+    tangentX = fixed3(worldTangent.x, worldBitangent.x, worldNormal.x);
+    tangentY = fixed3(worldTangent.y, worldBitangent.y, worldNormal.y);
+    tangentZ = fixed3(worldTangent.z, worldBitangent.z, worldNormal.z);
+}
+
+/// <summary>
 /// Extracts the world scale from the unity_ObjectToWorld matrix.
 /// </summary>
 inline float3 ExtractScale(VertexInput input)
@@ -93,6 +110,73 @@ inline float3 ExtractScale(VertexInput input)
 inline float3 ExtrudeVertex(float3 vertexPosition, float3 normal, float distance)
 {
     return vertexPosition + (normal * distance);
+}
+
+/// <summary>
+/// Calculates the UV coordinates along three planes based on a position and surface normal.
+/// </summary>
+inline void CalculateTriplanarUVs(fixed3 normal,
+                                  float3 position,
+                                  float sharpness, 
+                                  float4 textureScaleTranslation, 
+                                  out float3 triplanarBlend,
+                                  out float3 triplanarAxisSign,
+                                  out float2 uvX, 
+                                  out float2 uvY, 
+                                  out float2 uvZ)
+{
+    // Calculate triplanar uvs and apply texture scale and offset values like TRANSFORM_TEX.
+    triplanarBlend = pow(abs(normal), sharpness);
+    triplanarBlend /= dot(triplanarBlend, fixed3(1.0, 1.0, 1.0));
+    uvX = mad(position.zy, textureScaleTranslation.xy, textureScaleTranslation.zw);
+    uvY = mad(position.xz, textureScaleTranslation.xy, textureScaleTranslation.zw);
+    uvZ = mad(position.xy, textureScaleTranslation.xy, textureScaleTranslation.zw);
+
+    // Ternary operator is 2 instructions faster than sign() when we don't care about zero returning a zero sign.
+    triplanarAxisSign = normal < 0 ? -1 : 1;
+    uvX.x *= triplanarAxisSign.x;
+    uvY.x *= triplanarAxisSign.y;
+    uvZ.x *= -triplanarAxisSign.z;
+}
+
+/// <summary>
+/// Transforms the tangent space normal into a world normal.
+/// </summary>
+inline fixed3 TangentNormalToWorldNormal(fixed3 tangentNormal, 
+                                         fixed3 tangentX, 
+                                         fixed3 tangentY, 
+                                         fixed3 tangentZ, 
+                                         fixed triangleFacing)
+{
+    return normalize(fixed3(dot(tangentX, tangentNormal),
+                            dot(tangentY, tangentNormal), 
+                            dot(tangentZ, tangentNormal)) * triangleFacing);
+}
+
+/// <summary>
+/// Calculates the blended world space normal from a tangent space normal.
+/// </summary>
+inline fixed3 TangentNormalToWorldNormalTriplanar(fixed3 worldNormal,
+                                                  fixed3 tangentNormalX,
+                                                  fixed3 tangentNormalY, 
+                                                  fixed3 tangentNormalZ,
+                                                  float3 triplanarBlend,
+                                                  float3 triplanarAxisSign,
+                                                  fixed triangleFacing)
+{
+    tangentNormalX.x *= triplanarAxisSign.x;
+    tangentNormalY.x *= triplanarAxisSign.y;
+    tangentNormalZ.x *= -triplanarAxisSign.z;
+
+    // Swizzle world normals to match tangent space and apply whiteout normal blend.
+    tangentNormalX = fixed3(tangentNormalX.xy + worldNormal.zy, tangentNormalX.z * worldNormal.x);
+    tangentNormalY = fixed3(tangentNormalY.xy + worldNormal.xz, tangentNormalY.z * worldNormal.y);
+    tangentNormalZ = fixed3(tangentNormalZ.xy + worldNormal.xy, tangentNormalZ.z * worldNormal.z);
+
+    // Swizzle tangent normals to match world normal and blend together.
+    return normalize((tangentNormalX.zyx * triplanarBlend.x +
+                      tangentNormalY.xzy * triplanarBlend.y +
+                      tangentNormalZ.xyz * triplanarBlend.z) * triangleFacing);
 }
 
 #endif // MRTK_STANDARD_UTILITIES_INCLUDE
