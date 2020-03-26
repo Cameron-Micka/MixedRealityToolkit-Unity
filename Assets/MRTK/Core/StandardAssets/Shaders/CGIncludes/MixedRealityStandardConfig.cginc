@@ -52,6 +52,12 @@
 #undef _FRESNEL
 #endif
 
+#if defined(_HOVER_LIGHT) || defined(_PROXIMITY_LIGHT)
+#define _FLUENT_LIGHT
+#else
+#undef _FLUENT_LIGHT
+#endif
+
 #if defined(_ROUND_CORNERS) || defined(_BORDER_LIGHT) || defined(_INNER_GLOW)
 #define _DISTANCE_TO_EDGE
 #else

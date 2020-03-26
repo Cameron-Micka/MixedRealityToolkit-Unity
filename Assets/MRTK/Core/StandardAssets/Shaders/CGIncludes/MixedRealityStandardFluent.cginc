@@ -6,6 +6,165 @@
 
 #include "MixedRealityStandardUtilities.cginc"
 
+/// <summary>
+/// Fluent properties.
+/// </summary>
+#define HOVER_LIGHT_COUNT 2
+#define HOVER_LIGHT_DATA_SIZE 2
+float4 _HoverLightData[HOVER_LIGHT_COUNT * HOVER_LIGHT_DATA_SIZE];
+#if defined(_HOVER_COLOR_OVERRIDE)
+fixed3 _HoverColorOverride;
+#endif
+
+#define PROXIMITY_LIGHT_COUNT 2
+#define PROXIMITY_LIGHT_DATA_SIZE 6
+float4 _ProximityLightData[PROXIMITY_LIGHT_COUNT * PROXIMITY_LIGHT_DATA_SIZE];
+#if defined(_PROXIMITY_LIGHT_COLOR_OVERRIDE)
+float4 _ProximityLightCenterColorOverride;
+float4 _ProximityLightMiddleColorOverride;
+float4 _ProximityLightOuterColorOverride;
+#endif
+
+#if defined(_FLUENT_LIGHT) || defined(_BORDER_LIGHT)
+fixed _FluentLightIntensity;
+#endif
+
+inline float HoverLight(float4 hoverLight, float inverseRadius, float3 worldPosition)
+{
+    return (1.0 - saturate(length(hoverLight.xyz - worldPosition) * inverseRadius)) * hoverLight.w;
+}
+
+inline float ProximityLight(float4 proximityLight,
+                            float4 proximityLightParams,
+                            float4 proximityLightPulseParams,
+                            float3 worldPosition,
+                            float3 worldNormal,
+                            out fixed colorValue)
+{
+    float proximityLightDistance = dot(proximityLight.xyz - worldPosition, worldNormal);
+#if defined(_PROXIMITY_LIGHT_TWO_SIDED)
+    worldNormal = IF(proximityLightDistance < 0.0, -worldNormal, worldNormal);
+    proximityLightDistance = abs(proximityLightDistance);
+#endif
+    float normalizedProximityLightDistance = saturate(proximityLightDistance * proximityLightParams.y);
+    float3 projectedProximityLight = proximityLight.xyz - (worldNormal * abs(proximityLightDistance));
+    float projectedProximityLightDistance = length(projectedProximityLight - worldPosition);
+    float attenuation = (1.0 - normalizedProximityLightDistance) * proximityLight.w;
+    colorValue = saturate(projectedProximityLightDistance * proximityLightParams.z);
+    float pulse = step(proximityLightPulseParams.x, projectedProximityLightDistance) * proximityLightPulseParams.y;
+
+    return smoothstep(1.0, 0.0, projectedProximityLightDistance / (proximityLightParams.x *
+        max(pow(normalizedProximityLightDistance, 0.25), proximityLightParams.w))) * pulse * attenuation;
+}
+
+inline fixed3 MixProximityLightColor(fixed4 centerColor, fixed4 middleColor, fixed4 outerColor, fixed t)
+{
+    fixed3 color = lerp(centerColor.rgb, middleColor.rgb, smoothstep(centerColor.a, middleColor.a, t));
+    return lerp(color, outerColor, smoothstep(middleColor.a, outerColor.a, t));
+}
+
+inline void FluentLight(float3 worldPosition, 
+                        fixed3 worldNormal, 
+                        out float fluentLightContribution, 
+                        out fixed3 fluentLightColor)
+{
+    fluentLightContribution = 1.0;
+    fluentLightColor = fixed3(0.0, 0.0, 0.0);
+
+    // Hover light.
+#if defined(_HOVER_LIGHT)
+    fluentLightContribution = 0.0;
+
+    [unroll]
+    for (int hoverLightIndex = 0; hoverLightIndex < HOVER_LIGHT_COUNT; ++hoverLightIndex)
+    {
+        int dataIndex = hoverLightIndex * HOVER_LIGHT_DATA_SIZE;
+        fixed hoverValue = HoverLight(_HoverLightData[dataIndex], _HoverLightData[dataIndex + 1].w, worldPosition);
+        fluentLightContribution += hoverValue;
+#if !defined(_HOVER_COLOR_OVERRIDE)
+        fluentLightColor += lerp(fixed3(0.0, 0.0, 0.0), _HoverLightData[dataIndex + 1].rgb, hoverValue);
+#endif
+    }
+#if defined(_HOVER_COLOR_OVERRIDE)
+    fluentLightColor = _HoverColorOverride.rgb * fluentLightContribution;
+#endif
+#endif
+
+    // Proximity light.
+#if defined(_PROXIMITY_LIGHT)
+#if !defined(_HOVER_LIGHT)
+    fluentLightContribution = 0.0;
+#endif
+    [unroll]
+    for (int proximityLightIndex = 0; proximityLightIndex < PROXIMITY_LIGHT_COUNT; ++proximityLightIndex)
+    {
+        int dataIndex = proximityLightIndex * PROXIMITY_LIGHT_DATA_SIZE;
+        fixed colorValue;
+        fixed proximityValue = ProximityLight(_ProximityLightData[dataIndex], 
+                                              _ProximityLightData[dataIndex + 1], 
+                                              _ProximityLightData[dataIndex + 2], 
+                                              worldPosition, 
+                                              worldNormal, 
+                                              colorValue);
+        fluentLightContribution += proximityValue;
+#if defined(_PROXIMITY_LIGHT_COLOR_OVERRIDE)
+        fixed3 proximityColor = MixProximityLightColor(_ProximityLightCenterColorOverride, 
+                                                       _ProximityLightMiddleColorOverride, 
+                                                       _ProximityLightOuterColorOverride, 
+                                                       colorValue);
+#else
+        fixed3 proximityColor = MixProximityLightColor(_ProximityLightData[dataIndex + 3], 
+                                                       _ProximityLightData[dataIndex + 4], 
+                                                       _ProximityLightData[dataIndex + 5], 
+                                                       colorValue);
+#endif  
+#if defined(_PROXIMITY_LIGHT_SUBTRACTIVE)
+        fluentLightColor -= lerp(fixed3(0.0, 0.0, 0.0), proximityColor, proximityValue);
+#else
+        fluentLightColor += lerp(fixed3(0.0, 0.0, 0.0), proximityColor, proximityValue);
+#endif    
+    }
+#endif    
+}
+
+/// <summary>
+/// Lights greater than or equal to this distance are not considered in distance calculations.
+/// </summary>
+static const float _LightCullDistance = 10.0;
+
+/// <summary>
+/// Calculates the distance between the specified light and a vertex. If the light is disabled the distance will be
+/// greater than or equal to the "_LightCullDistance."
+/// </summary>
+inline float DistanceToLight(float4 light, float3 worldPosition)
+{
+    return distance(worldPosition, light.xyz) + ((1.0 - light.w) * _LightCullDistance);
+}
+
+/// <summary>
+/// Calculates the distance between the nearest light and a vertex.
+/// </summary>
+inline float DistanceToNearestLight(float3 worldPosition)
+{
+    float output = _LightCullDistance;
+
+    [unroll]
+    for (int hoverLightIndex = 0; hoverLightIndex < HOVER_LIGHT_COUNT; ++hoverLightIndex)
+    {
+        int dataIndex = hoverLightIndex * HOVER_LIGHT_DATA_SIZE;
+        output = min(output, DistanceToLight(_HoverLightData[dataIndex], worldPosition));
+    }
+
+    [unroll]
+    for (int proximityLightIndex = 0; proximityLightIndex < PROXIMITY_LIGHT_COUNT; ++proximityLightIndex)
+    {
+        int dataIndex = proximityLightIndex * PROXIMITY_LIGHT_DATA_SIZE;
+        output = min(output, DistanceToLight(_ProximityLightData[dataIndex], worldPosition));
+    }
+
+    return output;
+}
+
 inline float CalculateNearFade(float3 worldPosition, 
                                float fadeBeginDistance, 
                                float fadeCompleteDistance, 
@@ -155,6 +314,59 @@ inline fixed RoundCorners(float2 position,
     return RoundCornersSmooth(position, cornerCircleDistance, cornerCircleRadius, edgeSmoothingValue);
 #else
     return (PointVsRoundedBox(position, cornerCircleDistance, cornerCircleRadius) < 0.0);
+#endif
+}
+
+inline fixed BorderValue(float4 uv, float2 distanceToUVEdge)
+{
+#if defined(_BORDER_LIGHT)
+    return max(smoothstep(uv.z - _EdgeSmoothingValue, uv.z + _EdgeSmoothingValue, distanceToUVEdge.x),
+               smoothstep(uv.w - _EdgeSmoothingValue, uv.w + _EdgeSmoothingValue, distanceToUVEdge.y));
+#endif
+
+    return 0.0;
+}
+
+inline fixed BorderValueRound(float currentCornerRadius,
+                              float cornerCircleRadius,
+                              float2 cornerCircleDistance, 
+                              float2 cornerPosition,
+                              float2 halfScale2D, 
+                              float minScale)
+{
+#if defined(_ROUND_CORNERS)
+    fixed borderMargin = _RoundCornerMargin + _BorderWidth * 0.5;
+    cornerCircleRadius = saturate(max(currentCornerRadius - borderMargin, 0.01)) * minScale;
+    cornerCircleDistance = halfScale2D - (borderMargin * minScale) - cornerCircleRadius;
+    return 1.0 - RoundCornersSmooth(cornerPosition, cornerCircleDistance, cornerCircleRadius, _EdgeSmoothingValue);
+#endif
+
+    return 0.0;
+}
+
+inline void BorderLight(fixed borderValue,
+                        float fluentLightContribution,
+                        fixed3 fluentLightColor, 
+                        inout fixed4 albedo)
+{
+#if defined(_BORDER_LIGHT)
+#if defined(_HOVER_LIGHT) && defined(_BORDER_LIGHT_USES_HOVER_COLOR) && defined(_HOVER_COLOR_OVERRIDE)
+    fixed3 borderColor = _HoverColorOverride.rgb;
+#else
+    fixed3 borderColor = fixed3(1.0, 1.0, 1.0);
+#endif
+    fixed3 borderContribution = borderColor * borderValue * _BorderMinValue * _FluentLightIntensity;
+#if defined(_BORDER_LIGHT_REPLACES_ALBEDO)
+    albedo.rgb = lerp(albedo.rgb, borderContribution, borderValue);
+#else
+    albedo.rgb += borderContribution;
+#endif
+#if defined(_FLUENT_LIGHT)
+    albedo.rgb += (fluentLightColor * borderValue * fluentLightContribution * _FluentLightIntensity) * 2.0;
+#endif
+#if defined(_BORDER_LIGHT_OPAQUE)
+    albedo.a = max(albedo.a, borderValue * _BorderLightOpaqueAlpha);
+#endif
 #endif
 }
 

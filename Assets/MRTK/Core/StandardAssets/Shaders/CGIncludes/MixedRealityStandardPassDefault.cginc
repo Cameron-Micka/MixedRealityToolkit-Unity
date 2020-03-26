@@ -223,10 +223,10 @@ fixed4 FragmentShaderFunction(FragmentInput input, fixed triangleFacing : VFACE)
     float currentCornerRadius = GetRoundCornerRadius(input.uv);
     float cornerCircleRadius = saturate(max(currentCornerRadius - _RoundCornerMargin, 0.01)) * input.scale.z;
 
-    float2 halfScale = input.scale.xy * 0.5;
-    float2 cornerCircleDistance = halfScale - (_RoundCornerMargin * input.scale.z) - cornerCircleRadius;
+    float2 halfScale2D = input.scale.xy * 0.5;
+    float2 cornerCircleDistance = halfScale2D - (_RoundCornerMargin * input.scale.z) - cornerCircleRadius;
 
-    float2 cornerPosition = distanceToUVEdge * halfScale;
+    float2 cornerPosition = distanceToUVEdge * halfScale2D;
     float roundCornerClip = RoundCorners(cornerPosition, cornerCircleDistance, cornerCircleRadius, _EdgeSmoothingValue);
 #endif
 
@@ -265,179 +265,105 @@ fixed4 FragmentShaderFunction(FragmentInput input, fixed triangleFacing : VFACE)
 #endif
 #endif
 
-                // TODO
-                fixed pointToLight = 1.0;
-                fixed3 fluentLightColor = fixed3(0.0, 0.0, 0.0);
-
-                // Hover light.
-#if defined(_HOVER_LIGHT)
-                pointToLight = 0.0;
-
-                [unroll]
-                for (int hoverLightIndex = 0; hoverLightIndex < HOVER_LIGHT_COUNT; ++hoverLightIndex)
-                {
-                    int dataIndex = hoverLightIndex * HOVER_LIGHT_DATA_SIZE;
-                    fixed hoverValue = HoverLight(_HoverLightData[dataIndex], _HoverLightData[dataIndex + 1].w, input.worldPosition.xyz);
-                    pointToLight += hoverValue;
-#if !defined(_HOVER_COLOR_OVERRIDE)
-                    fluentLightColor += lerp(fixed3(0.0, 0.0, 0.0), _HoverLightData[dataIndex + 1].rgb, hoverValue);
-#endif
-                }
-#if defined(_HOVER_COLOR_OVERRIDE)
-                fluentLightColor = _HoverColorOverride.rgb * pointToLight;
-#endif
-#endif
-
-                // Proximity light.
-#if defined(_PROXIMITY_LIGHT)
-#if !defined(_HOVER_LIGHT)
-                pointToLight = 0.0;
-#endif
-                [unroll]
-                for (int proximityLightIndex = 0; proximityLightIndex < PROXIMITY_LIGHT_COUNT; ++proximityLightIndex)
-                {
-                    int dataIndex = proximityLightIndex * PROXIMITY_LIGHT_DATA_SIZE;
-                    fixed colorValue;
-                    fixed proximityValue = ProximityLight(_ProximityLightData[dataIndex], _ProximityLightData[dataIndex + 1], _ProximityLightData[dataIndex + 2], input.worldPosition.xyz, worldNormal, colorValue);
-                    pointToLight += proximityValue;
-#if defined(_PROXIMITY_LIGHT_COLOR_OVERRIDE)
-                    fixed3 proximityColor = MixProximityLightColor(_ProximityLightCenterColorOverride, _ProximityLightMiddleColorOverride, _ProximityLightOuterColorOverride, colorValue);
+    // Calculate the fluent light contributions.
+#if defined(_FLUENT_LIGHT)
+    fixed fluentLightContribution;
+    fixed3 fluentLightColor;
+#if defined(_NORMAL)
+    FluentLight(input.worldPosition.xyz, worldNormal, fluentLightContribution, fluentLightColor);
 #else
-                    fixed3 proximityColor = MixProximityLightColor(_ProximityLightData[dataIndex + 3], _ProximityLightData[dataIndex + 4], _ProximityLightData[dataIndex + 5], colorValue);
-#endif  
-#if defined(_PROXIMITY_LIGHT_SUBTRACTIVE)
-                    fluentLightColor -= lerp(fixed3(0.0, 0.0, 0.0), proximityColor, proximityValue);
-#else
-                    fluentLightColor += lerp(fixed3(0.0, 0.0, 0.0), proximityColor, proximityValue);
-#endif    
-                }
-#endif    
+    FluentLight(input.worldPosition.xyz, fixed3(0.0, 0.0, 0.0), fluentLightContribution, fluentLightColor);
+#endif
+#endif
 
-                // Border light.
+    // Calculate and apply light contribution due to border lighting.
 #if defined(_BORDER_LIGHT)
-                fixed borderValue;
+    fixed borderValue;
 #if defined(_ROUND_CORNERS)
-                fixed borderMargin = _RoundCornerMargin + _BorderWidth * 0.5;
-
-                cornerCircleRadius = saturate(max(currentCornerRadius - borderMargin, 0.01)) * input.scale.z;
-
-                cornerCircleDistance = halfScale - (borderMargin * input.scale.z) - cornerCircleRadius;
-
-                borderValue = 1.0 - RoundCornersSmooth(cornerPosition, cornerCircleDistance, cornerCircleRadius, _EdgeSmoothingValue);
+    borderValue = BorderValueRound(currentCornerRadius, 
+                                   cornerCircleRadius, 
+                                   cornerCircleDistance, 
+                                   cornerPosition, 
+                                   halfScale2D, 
+                                   input.scale.z);
 #else
-                borderValue = max(smoothstep(input.uv.z - _EdgeSmoothingValue, input.uv.z + _EdgeSmoothingValue, distanceToUVEdge.x),
-                                  smoothstep(input.uv.w - _EdgeSmoothingValue, input.uv.w + _EdgeSmoothingValue, distanceToUVEdge.y));
+    borderValue = BorderValue(input.uv, distanceToUVEdge);
 #endif
-#if defined(_HOVER_LIGHT) && defined(_BORDER_LIGHT_USES_HOVER_COLOR) && defined(_HOVER_COLOR_OVERRIDE)
-                fixed3 borderColor = _HoverColorOverride.rgb;
+#if defined(_FLUENT_LIGHT)
+    BorderLight(borderValue, fluentLightContribution, fluentLightColor, albedo);
 #else
-                fixed3 borderColor = fixed3(1.0, 1.0, 1.0);
-#endif
-                fixed3 borderContribution = borderColor * borderValue * _BorderMinValue * _FluentLightIntensity;
-#if defined(_BORDER_LIGHT_REPLACES_ALBEDO)
-                albedo.rgb = lerp(albedo.rgb, borderContribution, borderValue);
-#else
-                albedo.rgb += borderContribution;
-#endif
-#if defined(_HOVER_LIGHT) || defined(_PROXIMITY_LIGHT)
-                albedo.rgb += (fluentLightColor * borderValue * pointToLight * _FluentLightIntensity) * 2.0;
-#endif
-#if defined(_BORDER_LIGHT_OPAQUE)
-                albedo.a = max(albedo.a, borderValue * _BorderLightOpaqueAlpha);
+    BorderLight(borderValue, 0.0, fixed3(0.0, 0.0, 0.0), albedo);
 #endif
 #endif
-
 #if defined(_ROUND_CORNERS)
-                albedo *= roundCornerClip;
-                pointToLight *= roundCornerClip;
+    albedo *= roundCornerClip;
+#if defined(_FLUENT_LIGHT)
+    fluentLightContribution *= roundCornerClip;
+#endif
 #endif
 
+    // Clip the current pixel based on the albedo alpha value.
 #if defined(_ALPHA_CLIP)
-#if !defined(_ALPHATEST_ON)
-                _Cutoff = 0.5;
-#endif
 #if defined(_CLIPPING_PRIMITIVE)
-                albedo *= (primitiveDistance > 0.0);
+    albedo *= (primitiveDistance > 0.0);
 #endif
-                clip(albedo.a - _Cutoff);
-                albedo.a = 1.0;
+    AlbedoClip(_Cutoff, albedo);
 #endif
 
-                // Blinn phong lighting.
-#if defined(_DIRECTIONAL_LIGHT)
+    // Final lighting mix.
+    fixed4 output;
+
 #if defined(_LIGHTWEIGHT_RENDER_PIPELINE)
-                float4 directionalLightDirection = _MainLightPosition;
+    float4 lightDirection = _MainLightPosition;
 #else
-                float4 directionalLightDirection = _WorldSpaceLightPos0;
-#endif
-                fixed diffuse = max(0.0, dot(worldNormal, directionalLightDirection));
-#if defined(_SPECULAR_HIGHLIGHTS)
-                fixed halfVector = max(0.0, dot(worldNormal, normalize(directionalLightDirection + worldViewVector)));
-                fixed specular = saturate(pow(halfVector, _Shininess * pow(_Smoothness, 4.0)) * (_Smoothness * 2.0) * _Metallic);
-#else
-                fixed specular = 0.0;
-#endif
+    float4 lightDirection = _WorldSpaceLightPos0;
 #endif
 
-                // Image based lighting (attempt to mimic the Standard shader).
+    IBLInput iblInput = (IBLInput)0;
 #if defined(_REFLECTIONS)
-                fixed3 worldReflection = reflect(incidentVector, worldNormal);
-                fixed4 iblData = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, worldReflection, (1.0 - _Smoothness) * UNITY_SPECCUBE_LOD_STEPS);
-                fixed3 ibl = DecodeHDR(iblData, unity_SpecCube0_HDR);
+    iblInput.incidentVector = incidentVector;
+    iblInput.worldNormal = worldNormal;
+    iblInput.smoothness = _Smoothness;
+#endif
 #if defined(_REFRACTION)
-                fixed4 refractColor = UNITY_SAMPLE_TEXCUBE(unity_SpecCube0, refract(incidentVector, worldNormal, _RefractiveIndex));
-                ibl *= DecodeHDR(refractColor, unity_SpecCube0_HDR);
-#endif
-#else
-                fixed3 ibl = unity_IndirectSpecColor.rgb;
+    iblInput.refractiveIndex = _RefractiveIndex;
 #endif
 
-                // Fresnel lighting.
-#if defined(_FRESNEL)
-                fixed fresnel = 1.0 - saturate(abs(dot(worldViewVector, worldNormal)));
-#if defined(_RIM_LIGHT)
-                fixed3 fresnelColor = _RimColor * pow(fresnel, _RimPower);
-#else
-                fixed3 fresnelColor = unity_IndirectSpecColor.rgb * (pow(fresnel, _FresnelPower) * max(_Smoothness, 0.5));
-#endif
-#endif
-                // Final lighting mix.
-                fixed4 output = albedo;
+    SurfaceInput surfaceInput = (SurfaceInput)0;
+    surfaceInput.albedo = albedo;
 #if defined(_SPHERICAL_HARMONICS)
-                fixed3 ambient = input.ambient;
+    surfaceInput.ambient = input.ambient;
 #else
-                fixed3 ambient = glstate_lightmodel_ambient + fixed3(0.25, 0.25, 0.25);
+    surfaceInput.ambient = glstate_lightmodel_ambient + fixed3(0.25, 0.25, 0.25);
 #endif
-                fixed minProperty = min(_Smoothness, _Metallic);
+    surfaceInput.metallic = _Metallic;
+    surfaceInput.smoothness = _Smoothness;
+#if defined(_FRESNEL) || defined(_RIM_LIGHT)
+    FresnelInput fresnelInput = (FresnelInput)0;
+    fresnelInput.worldNormal = worldNormal;
+    fresnelInput.worldViewVector = worldViewVector;
+#if defined(_RIM_LIGHT)
+    fresnelInput.rimColor = _RimColor;
+    fresnelInput.rimPower = _RimPower;
+#else
+    fresnelInput.smoothness = _Smoothness;
+#endif
+    surfaceInput.fresnel = CalculateFresnel(fresnelInput);
+#endif
+#if defined(_DIRECTIONAL_LIGHT) || defined(_REFLECTIONS)
+    surfaceInput.ibl = CalculateIBL(iblInput);
 #if defined(_DIRECTIONAL_LIGHT)
-                fixed oneMinusMetallic = (1.0 - _Metallic);
-                output.rgb = lerp(output.rgb, ibl, minProperty);
-#if defined(_LIGHTWEIGHT_RENDER_PIPELINE)
-                fixed3 directionalLightColor = _MainLightColor.rgb;
-#else
-                fixed3 directionalLightColor = _LightColor0.rgb;
-#endif
-                output.rgb *= lerp((ambient + directionalLightColor * diffuse + directionalLightColor * specular) * max(oneMinusMetallic, _MinMetallicLightContribution), albedo, minProperty);
-                output.rgb += (directionalLightColor * albedo * specular) + (directionalLightColor * specular * _Smoothness);
-                output.rgb += ibl * oneMinusMetallic * _IblContribution;
-#elif defined(_REFLECTIONS)
-                output.rgb = lerp(output.rgb, ibl, minProperty);
-                output.rgb *= lerp(ambient, albedo, minProperty);
-#elif defined(_SPHERICAL_HARMONICS)
-                output.rgb *= ambient;
-#endif
-
-#if defined(_FRESNEL)
-#if defined(_RIM_LIGHT) || !defined(_REFLECTIONS)
-                output.rgb += fresnelColor;
-#else
-                output.rgb += fresnelColor * (1.0 - minProperty);
+    surfaceInput.diffuse = CalculateDiffuse(worldNormal, lightDirection);
+#if defined(_SPECULAR_HIGHLIGHTS)
+    surfaceInput.specular = CalculateSpecular(worldNormal, worldViewVector, lightDirection, _Metallic, _Smoothness);
 #endif
 #endif
-
+#endif
 #if defined(_EMISSION)
-    output.rgb += _EmissiveColor;
+    surfaceInput.emission = _EmissiveColor;
 #endif
+
+    output = CalculateLighting(surfaceInput);
 
                 // Inner glow.
 #if defined(_INNER_GLOW)
@@ -459,8 +385,8 @@ fixed4 FragmentShaderFunction(FragmentInput input, fixed triangleFacing : VFACE)
 #endif
 
                 // Hover and proximity lighting should occur after near plane fading.
-#if defined(_HOVER_LIGHT) || defined(_PROXIMITY_LIGHT)
-                output.rgb += fluentLightColor * _FluentLightIntensity * pointToLight;
+#if defined(_FLUENT_LIGHT)
+                output.rgb += fluentLightColor * _FluentLightIntensity * fluentLightContribution;
 #endif
 
                 // Perform non-alpha clipped primitive clipping on the final output.

@@ -140,26 +140,6 @@ float _FadeCompleteDistance;
 fixed _FadeMinValue;
 #endif
 
-#define HOVER_LIGHT_COUNT 2
-#define HOVER_LIGHT_DATA_SIZE 2
-float4 _HoverLightData[HOVER_LIGHT_COUNT * HOVER_LIGHT_DATA_SIZE];
-#if defined(_HOVER_COLOR_OVERRIDE)
-fixed3 _HoverColorOverride;
-#endif
-
-#define PROXIMITY_LIGHT_COUNT 2
-#define PROXIMITY_LIGHT_DATA_SIZE 6
-float4 _ProximityLightData[PROXIMITY_LIGHT_COUNT * PROXIMITY_LIGHT_DATA_SIZE];
-#if defined(_PROXIMITY_LIGHT_COLOR_OVERRIDE)
-float4 _ProximityLightCenterColorOverride;
-float4 _ProximityLightMiddleColorOverride;
-float4 _ProximityLightOuterColorOverride;
-#endif
-
-#if defined(_HOVER_LIGHT) || defined(_PROXIMITY_LIGHT) || defined(_BORDER_LIGHT)
-fixed _FluentLightIntensity;
-#endif
-
 #if defined(_ROUND_CORNERS)
 #if defined(_INDEPENDENT_CORNERS)
 float4 _RoundCornersRadius;
@@ -200,19 +180,6 @@ fixed _EnvironmentColorIntensity;
 fixed3 _EnvironmentColorX;
 fixed3 _EnvironmentColorY;
 fixed3 _EnvironmentColorZ;
-#endif
-
-#if defined(_DIRECTIONAL_LIGHT)
-static const fixed _MinMetallicLightContribution = 0.7;
-static const fixed _IblContribution = 0.1;
-#endif
-
-#if defined(_SPECULAR_HIGHLIGHTS)
-static const float _Shininess = 800.0;
-#endif
-
-#if defined(_FRESNEL)
-static const float _FresnelPower = 8.0;
 #endif
 
 #endif // MRTK_STANDARD_INPUT_INCLUDE

@@ -94,4 +94,18 @@ inline fixed3 CalculateClippingPrimitiveBorderColor(float primitiveDistance)
 #endif
 }
 
+/// <summary>
+/// Clips a pixel based on the albedo alpha value and desired alpha cutoff.
+/// </summary>
+inline void AlbedoClip(float cutoff, inout fixed4 albedo)
+{
+#if defined(_ALPHA_CLIP)
+#if !defined(_ALPHATEST_ON)
+    cutoff = 0.5;
+#endif
+    clip(albedo.a - cutoff);
+    albedo.a = 1.0;
+#endif
+}
+
 #endif // MRTK_STANDARD_CLIPPING_INCLUDE

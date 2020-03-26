@@ -21,44 +21,6 @@ inline float DistanceToCameraWorld(float3 worldPosition)
 }
 
 /// <summary>
-/// Lights greater than or equal to this distance are not considered in distance calculations.
-/// </summary>
-static const float _LightCullDistance = 10.0;
-
-/// <summary>
-/// Calculates the distance between the specified light and a vertex. If the light is disabled the distance will be
-/// greater than or equal to the "_LightCullDistance."
-/// </summary>
-inline float DistanceToLight(float4 light, float3 worldPosition)
-{
-    return distance(worldPosition, light.xyz) + ((1.0 - light.w) * _LightCullDistance);
-}
-
-/// <summary>
-/// Calculates the distance between the nearest light and a vertex.
-/// </summary>
-inline float DistanceToNearestLight(float3 worldPosition)
-{
-    float output = _LightCullDistance;
-
-    [unroll]
-    for (int hoverLightIndex = 0; hoverLightIndex < HOVER_LIGHT_COUNT; ++hoverLightIndex)
-    {
-        int dataIndex = hoverLightIndex * HOVER_LIGHT_DATA_SIZE;
-        output = min(output, DistanceToLight(_HoverLightData[dataIndex], worldPosition));
-    }
-
-    [unroll]
-    for (int proximityLightIndex = 0; proximityLightIndex < PROXIMITY_LIGHT_COUNT; ++proximityLightIndex)
-    {
-        int dataIndex = proximityLightIndex * PROXIMITY_LIGHT_DATA_SIZE;
-        output = min(output, DistanceToLight(_ProximityLightData[dataIndex], worldPosition));
-    }
-
-    return output;
-}
-
-/// <summary>
 /// Calculates the tangent matrix basis vectors for use with normal mapping.
 /// </summary>
 inline void CalculateTangentBasis(fixed3 worldNormal,
