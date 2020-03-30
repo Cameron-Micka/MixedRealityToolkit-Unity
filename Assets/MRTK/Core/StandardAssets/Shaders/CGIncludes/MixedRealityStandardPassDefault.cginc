@@ -285,9 +285,10 @@ fixed4 FragmentShaderFunction(FragmentInput input, fixed triangleFacing : VFACE)
                                    cornerCircleDistance, 
                                    cornerPosition, 
                                    halfScale2D, 
-                                   input.scale.z);
+                                   input.scale.z, 
+                                   _EdgeSmoothingValue);
 #else
-    borderValue = BorderValue(input.uv, distanceToUVEdge);
+    borderValue = BorderValue(input.uv, distanceToUVEdge, _EdgeSmoothingValue);
 #endif
 #if defined(_FLUENT_LIGHT)
     BorderLight(borderValue, fluentLightContribution, fluentLightColor, albedo);
@@ -365,35 +366,39 @@ fixed4 FragmentShaderFunction(FragmentInput input, fixed triangleFacing : VFACE)
 
     output = CalculateLighting(surfaceInput);
 
-                // Inner glow.
+    // Inner glow.
 #if defined(_INNER_GLOW)
-                fixed2 uvGlow = pow(distanceToUVEdge * _InnerGlowColor.a, _InnerGlowPower);
-                output.rgb += lerp(fixed3(0.0, 0.0, 0.0), _InnerGlowColor.rgb, uvGlow.x + uvGlow.y);
+    output.rgb += CalculateInnerGlow(distanceToUVEdge, _InnerGlowColor, _InnerGlowPower);
 #endif
 
-                // Environment coloring.
+    // Environment coloring.
 #if defined(_ENVIRONMENT_COLORING)
-                fixed3 environmentColor = incidentVector.x * incidentVector.x * _EnvironmentColorX +
-                                          incidentVector.y * incidentVector.y * _EnvironmentColorY +
-                                          incidentVector.z * incidentVector.z * _EnvironmentColorZ;
-                output.rgb += environmentColor * max(0.0, dot(incidentVector, worldNormal) + _EnvironmentColorThreshold) * _EnvironmentColorIntensity;
+    output.rgb += CalculateEnvironmentColoring(incidentVector, 
+                                               worldNormal, 
+                                               _EnvironmentColorThreshold, 
+                                               _EnvironmentColorIntensity, 
+                                               _EnvironmentColorX, 
+                                               _EnvironmentColorY, 
+                                               _EnvironmentColorZ);
 
 #endif
 
+    // Apply the near fade value calculated in the vetex shader.
 #if defined(_NEAR_PLANE_FADE)
-                output *= input.worldPosition.w;
+    output *= input.worldPosition.w;
 #endif
 
-                // Hover and proximity lighting should occur after near plane fading.
+    // Apply hover and proximity lighting after near plane fading.
 #if defined(_FLUENT_LIGHT)
-                output.rgb += fluentLightColor * _FluentLightIntensity * fluentLightContribution;
+    ApplyFluentLight(output, fluentLightColor, _FluentLightIntensity, fluentLightContribution);
 #endif
 
-                // Perform non-alpha clipped primitive clipping on the final output.
+    // Perform non-alpha clipped primitive clipping on the final output.
 #if defined(_CLIPPING_PRIMITIVE) && !defined(_ALPHA_CLIP)
-                output *= saturate(primitiveDistance * (1.0f / _BlendedClippingWidth));
+    output *= saturate(primitiveDistance * (1.0f / _BlendedClippingWidth));
 #endif
-                return output;
+
+    return output; 
 }
 
 #endif // MRTK_STANDARD_PASS_DEFAULT_INCLUDE

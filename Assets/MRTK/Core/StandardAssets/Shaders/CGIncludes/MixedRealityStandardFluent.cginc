@@ -127,6 +127,11 @@ inline void FluentLight(float3 worldPosition,
 #endif    
 }
 
+inline void ApplyFluentLight(inout fixed4 input, fixed3 color, fixed intensity, fixed contribution)
+{
+    input.rgb += color * intensity * contribution;
+}
+
 /// <summary>
 /// Lights greater than or equal to this distance are not considered in distance calculations.
 /// </summary>
@@ -317,11 +322,11 @@ inline fixed RoundCorners(float2 position,
 #endif
 }
 
-inline fixed BorderValue(float4 uv, float2 distanceToUVEdge)
+inline fixed BorderValue(float4 uv, float2 distanceToUVEdge, float edgeSmoothingValue)
 {
 #if defined(_BORDER_LIGHT)
-    return max(smoothstep(uv.z - _EdgeSmoothingValue, uv.z + _EdgeSmoothingValue, distanceToUVEdge.x),
-               smoothstep(uv.w - _EdgeSmoothingValue, uv.w + _EdgeSmoothingValue, distanceToUVEdge.y));
+    return max(smoothstep(uv.z - edgeSmoothingValue, uv.z + edgeSmoothingValue, distanceToUVEdge.x),
+               smoothstep(uv.w - edgeSmoothingValue, uv.w + edgeSmoothingValue, distanceToUVEdge.y));
 #endif
 
     return 0.0;
@@ -332,13 +337,14 @@ inline fixed BorderValueRound(float currentCornerRadius,
                               float2 cornerCircleDistance, 
                               float2 cornerPosition,
                               float2 halfScale2D, 
-                              float minScale)
+                              float minScale,
+                              float edgeSmoothingValue)
 {
 #if defined(_ROUND_CORNERS)
     fixed borderMargin = _RoundCornerMargin + _BorderWidth * 0.5;
     cornerCircleRadius = saturate(max(currentCornerRadius - borderMargin, 0.01)) * minScale;
     cornerCircleDistance = halfScale2D - (borderMargin * minScale) - cornerCircleRadius;
-    return 1.0 - RoundCornersSmooth(cornerPosition, cornerCircleDistance, cornerCircleRadius, _EdgeSmoothingValue);
+    return 1.0 - RoundCornersSmooth(cornerPosition, cornerCircleDistance, cornerCircleRadius, edgeSmoothingValue);
 #endif
 
     return 0.0;
@@ -370,11 +376,11 @@ inline void BorderLight(fixed borderValue,
 #endif
 }
 
-fixed3 Iridescence(float2 uv,
-                   sampler2D spectrumMap,
-                   float threshold, 
-                   float angle, 
-                   float intensity)
+inline fixed3 Iridescence(float2 uv,
+                          sampler2D spectrumMap,
+                          float threshold, 
+                          float angle, 
+                          float intensity)
 {
     float3 rightTangent = normalize(mul((float3x3)unity_ObjectToWorld, float3(1.0, 0.0, 0.0)));
     float3 incidentWithCenter = normalize(mul(unity_ObjectToWorld, float4(0.0, 0.0, 0.0, 1.0)) - _WorldSpaceCameraPos);
@@ -386,6 +392,28 @@ fixed3 Iridescence(float2 uv,
     float2 XY = uv - float2(0.5, 0.5);
     float s = (cos(angle) * XY.x - sin(angle) * XY.y) / cos(angle);
     return (left.rgb + s * (right.rgb - left.rgb)) * intensity;
+}
+
+inline fixed3 CalculateInnerGlow(float2 distanceToUVEdge, fixed4 innerGlowColor, fixed innerGlowPower)
+{
+    fixed2 uvGlow = pow(distanceToUVEdge * innerGlowColor.a, innerGlowPower);
+    return lerp(fixed3(0.0, 0.0, 0.0), innerGlowColor.rgb, uvGlow.x + uvGlow.y);
+}
+
+inline fixed3 CalculateEnvironmentColoring(fixed3 incidentVector, 
+                                           fixed3 worldNormal,
+                                           fixed environmentColorThreshold,
+                                           fixed environmentColorIntensity,
+                                           fixed3 environmentColorX,
+                                           fixed3 environmentColorY,
+                                           fixed3 environmentColorZ)
+{
+    fixed3 environmentColor = incidentVector.x * incidentVector.x * environmentColorX +
+                              incidentVector.y * incidentVector.y * environmentColorY +
+                              incidentVector.z * incidentVector.z * environmentColorZ;
+    return environmentColor * 
+           max(0.0, dot(incidentVector, worldNormal) + environmentColorThreshold) * 
+           environmentColorIntensity;
 }
 
 #endif // MRTK_STANDARD_FLUENT_INCLUDE
